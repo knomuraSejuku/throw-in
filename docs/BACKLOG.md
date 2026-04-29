@@ -206,6 +206,8 @@
     - AI整理だけでなく、タイトルも原文も取得されていない
     - URL保存時に「URLの本文抽出に失敗しました。URLを確認するか、メモとして保存してください。(500)」と表示
     - 以前はURL保存自体はできていたため、直近修正で「抽出失敗を保存停止へ変えた」ことがユーザー体験上の退行になっている
+    - 退行対応後も「URLの本文抽出に失敗しました。タイトル未取得のまま保存します。(<!DOCTYPE html>...500: Internal Server Error...)」と表示
+    - 本番へ `POST /api/extract` を直接投げてもNextの汎用500 HTMLが返る一方、`GET /api/health/ai` と `POST /api/process-ai` はJSONで返るため、抽出APIルート固有の起動失敗が濃厚
   - **追加切り分け:**
     - URL保存時、`/api/extract` 失敗を `console.warn` だけで握りつぶし、`無題の記事` として保存する実装だった
     - その結果 `extracted_content` が空になり、AI処理に渡す `contentForAi` も空/短文になりやすい
@@ -223,6 +225,22 @@
        - `dns/promises`, `jsdom`, `@mozilla/readability`, `pdf-parse` 系の依存をEdge runtimeへ誤判定させない
     3. Readability/JSDOMの本文抽出だけが失敗してもAPI全体を500にせず、Cheerioで `article` / `main` / `body` テキストからフォールバック本文を返す
     4. URL抽出失敗時のレスポンス本文 `{ error }` をクライアント側で読み取り、Vercelログなしでも原因を見やすくする
+  - **追加修正3（本番500原因対応）:**
+    1. `/api/extract` から `jsdom`, `@mozilla/readability`, `cheerio` の静的importを外す
+       - ローカルstandaloneでは動くが、Vercel本番では `/api/extract` だけがハンドラ内JSONではなくNext汎用500 HTMLを返した
+       - ルートモジュール読み込み時点の依存/runtime不整合が疑わしいため、まず本番で起動確実な実装へ戻す
+    2. HTMLメタ情報抽出を軽量な正規表現ベースへ変更
+       - `og:title`, `twitter:title`, `<title>`
+       - `og:description`, `description`, `twitter:description`
+       - `og:image`, `twitter:image`
+    3. 本文抽出は `article` → `main` → `body` の順にタグ除去テキストを返す
+       - Readability品質より、本番でタイトル/原文/AI整理を復旧することを優先
+    4. クライアント側でHTML 500本文をそのまま表示しない
+       - `text/html` のエラーは「サーバー内部エラー。Vercel Function Logs確認」と短く表示する
+  - **根本原因メモ:**
+    - 直接の退行原因は、私が `50572db` で抽出失敗を保存停止に変え、さらに `385cb77` でも抽出APIの本番起動失敗自体を潰せていなかったこと
+    - 抽出APIの本番500は、`c95f8b9` でVercel向けに追加した抽出APIの静的HTML解析依存がVercel runtime上で起動時例外を起こしている可能性が高い
+    - Vercel CLIログは現ワークスペースがVercelプロジェクト未リンクのため未取得。リンク後にFunction Logsで最終確認する
   - **次にやること:**
     1. 本番でURLクリップを追加し、保存自体が通ることを確認
     2. 本文が取得できたクリップでsummary/tags/category/key_pointsが保存されることを確認

@@ -21,12 +21,20 @@ const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
 });
 
 const readApiError = async (response: Response): Promise<string> => {
+  const contentType = response.headers.get('content-type') || '';
+
   try {
-    const data = await response.clone().json();
-    if (data?.error) return String(data.error);
-    if (data?.detail) return String(data.detail);
+    if (contentType.includes('application/json')) {
+      const data = await response.clone().json();
+      if (data?.error) return String(data.error);
+      if (data?.detail) return String(data.detail);
+    }
   } catch {
     // Fall back to text below.
+  }
+
+  if (contentType.includes('text/html')) {
+    return `サーバー内部エラーが発生しました。Vercel Function Logsを確認してください。HTTP ${response.status}`;
   }
 
   try {

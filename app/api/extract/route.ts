@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dns from 'dns/promises';
-import { JSDOM } from 'jsdom';
-import { Readability } from '@mozilla/readability';
-import * as cheerio from 'cheerio';
 
 export const runtime = 'nodejs';
 
@@ -30,6 +27,67 @@ function getErrorMessage(error: unknown): string {
 
 function normalizeText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+function getMetaContent(html: string, key: string): string {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const patterns = [
+    new RegExp(`<meta\\s+[^>]*(?:property|name)=["']${escapedKey}["'][^>]*content=["']([^"']*)["'][^>]*>`, 'i'),
+    new RegExp(`<meta\\s+[^>]*content=["']([^"']*)["'][^>]*(?:property|name)=["']${escapedKey}["'][^>]*>`, 'i'),
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(html);
+    if (match?.[1]) return decodeHtmlEntities(match[1].trim());
+  }
+
+  return '';
+}
+
+function getTagText(html: string, tagName: string): string {
+  const match = new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i').exec(html);
+  return match?.[1] ? htmlToText(match[1]) : '';
+}
+
+function htmlToText(html: string): string {
+  const withoutNoise = html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<nav\b[^>]*>[\s\S]*?<\/nav>/gi, ' ')
+    .replace(/<footer\b[^>]*>[\s\S]*?<\/footer>/gi, ' ');
+
+  return normalizeText(decodeHtmlEntities(withoutNoise.replace(/<[^>]+>/g, ' ')));
+}
+
+function extractMainText(html: string): string {
+  const articleMatch = /<article\b[^>]*>([\s\S]*?)<\/article>/i.exec(html);
+  if (articleMatch?.[1]) {
+    const text = htmlToText(articleMatch[1]);
+    if (text.length > 80) return text;
+  }
+
+  const mainMatch = /<main\b[^>]*>([\s\S]*?)<\/main>/i.exec(html);
+  if (mainMatch?.[1]) {
+    const text = htmlToText(mainMatch[1]);
+    if (text.length > 80) return text;
+  }
+
+  const bodyMatch = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html);
+  return htmlToText(bodyMatch?.[1] || html);
 }
 
 export async function POST(req: NextRequest) {
@@ -128,42 +186,20 @@ export async function POST(req: NextRequest) {
 
     const html = await response.text();
 
-    // 1. Cheerio for fast metadata extraction
-    const $ = cheerio.load(html);
-    const ogTitle = $('meta[property="og:title"]').attr('content') || $('meta[name="twitter:title"]').attr('content') || '';
-    const pageTitle = $('title').text() || '';
-
-    const ogDescription = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || $('meta[name="twitter:description"]').attr('content') || '';
-    const ogImage = $('meta[property="og:image"]').attr('content') || $('meta[name="twitter:image"]').attr('content') || '';
-
-    // 2. Readability for main content extraction. Keep metadata extraction usable
-    // even when Readability/JSDOM cannot parse a specific page in production.
-    let article: {
-      title?: string | null;
-      excerpt?: string | null;
-      textContent?: string | null;
-    } | null = null;
-
-    try {
-      const doc = new JSDOM(html, { url });
-      const reader = new Readability(doc.window.document);
-      article = reader.parse();
-    } catch (readabilityError) {
-      console.warn('Readability extraction failed:', {
-        url,
-        error: getErrorMessage(readabilityError),
-      });
-    }
-
-    const fallbackBody = normalizeText(
-      $('article').text() || $('main').text() || $('body').text()
-    ).slice(0, 30000);
+    const ogTitle = getMetaContent(html, 'og:title') || getMetaContent(html, 'twitter:title');
+    const pageTitle = getTagText(html, 'title');
+    const ogDescription =
+      getMetaContent(html, 'og:description') ||
+      getMetaContent(html, 'description') ||
+      getMetaContent(html, 'twitter:description');
+    const ogImage = getMetaContent(html, 'og:image') || getMetaContent(html, 'twitter:image');
+    const body = extractMainText(html).slice(0, 30000);
 
     return NextResponse.json({
-      title: ogTitle || pageTitle || article?.title || null,
-      description: ogDescription || article?.excerpt || null,
+      title: ogTitle || pageTitle || null,
+      description: ogDescription || null,
       thumbnail: ogImage || null,
-      body: article?.textContent?.trim() || fallbackBody || ogDescription || null,
+      body: body || ogDescription || null,
       domain: parsedUrl.hostname,
     });
 
