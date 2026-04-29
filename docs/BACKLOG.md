@@ -217,7 +217,7 @@
     - アプリコード上、OpenAIキーがクライアントへ露出しない
   - ファイル: `README.md`, `.env.example`, `CLAUDE.md`, `docs/tech-spec.md`, `docs/BACKLOG.md`, `app/api/process-ai/route.ts`
 
-- [!] **J13** GitHub連携 + Vercelデプロイ準備
+- [~] **J13** GitHub連携 + Vercelデプロイ準備
   - **目的:** ローカルのみの作業状態をGitHubへ反映し、VercelはGitHub repo連携で継続デプロイできる状態にする
   - **現状確認:**
     - GitHub remoteは既存: `git@github.com:knomuraSejuku/throw-in.git`
@@ -248,12 +248,12 @@
        - 詳細ログではGitHubがこの公開鍵をacceptしている
        - 失敗原因: 秘密鍵にpassphraseがあり、この実行環境では `/dev/tty` が使えずpassphrase入力できない
        - 対応待ち: ユーザー側Terminalで `ssh-add --apple-use-keychain ~/.ssh/id_ed25519` を実行し、passphraseをKeychain/ssh-agentへ登録
+    8. ユーザー側でSSH認証復旧済み
+    9. `git push origin main` 成功
+       - `04a8a5e..c95f8b9  main -> main`
   - **次にやること:**
-    1. ユーザー側Terminalで `ssh-add --apple-use-keychain ~/.ssh/id_ed25519` を実行
-    2. `ssh -T git@github.com` が成功することを確認
-    3. GitHub認証を復旧して `origin/main` へpush
-    2. Vercel DashboardでGitHub repo `knomuraSejuku/throw-in` をImport
-    3. Vercel Environment Variablesを設定
+    1. Vercel DashboardでGitHub repo `knomuraSejuku/throw-in` をImport
+    2. Vercel Environment Variablesを設定
        - Production:
          - `NEXT_PUBLIC_SUPABASE_URL`
          - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -264,7 +264,7 @@
          - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
          - `OPENAI_API_KEY`（Sensitive）
        - `SUPABASE_SERVICE_ROLE_KEY` はPreviewには原則入れない
-    4. Supabase Auth Redirect URLにVercel本番URLを追加
+    3. Supabase Auth Redirect URLにVercel本番URLを追加
        - `https://<production-domain>/auth/callback`
        - Previewを使うならVercel preview URLのallowlistも追加
   - **注意:**
