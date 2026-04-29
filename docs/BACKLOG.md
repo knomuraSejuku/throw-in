@@ -174,7 +174,7 @@
     - `OPENAI_API_KEY` 未設定時はAI系機能が503等で分かりやすく失敗する
   - ファイル: `app/add/page.tsx`, `app/reports/page.tsx`, `app/insights/page.tsx`, `app/api/process-ai/route.ts`, `app/settings/page.tsx`
 
-- [~] **J14** 本番AI処理が進まない問題の診断・修正
+- [x] **J14** 本番AI処理が進まない問題の診断・修正
   - **ユーザー報告:** Vercel本番でログイン成功。`OPENAI_API_KEY` も登録済みだが、AI関連機能が動作しておらず、クリップの整理が進まない
   - **現状切り分け:**
     - クリップ整理の本線は `lib/store.ts` → `POST /api/process-ai`
@@ -250,7 +250,7 @@
     6. 既に「無題の記事」として保存された本文なしクリップは、URL抽出が再実行されないため、削除して再保存するか、URL再抽出機能を別途実装する
   - **受け入れ条件:**
     - 本番で `GET /api/health/ai` が `openaiConfigured: true` を返す（達成済み）
-    - 新規クリップ保存後にsummary/tags/category/key_pointsが保存される
+    - 新規クリップ保存後にsummary/tags/category/key_pointsが保存される（ユーザー確認済み: 「ようやく上手く動いた」）
     - 失敗時にVercel Logsで原因を追える
   - ファイル: `app/api/process-ai/route.ts`, `app/api/health/ai/route.ts`, `app/api/extract/route.ts`, `lib/openai-config.ts`, `middleware.ts`, `lib/store.ts`, `app/add/page.tsx`, Vercel Environment Variables
 
