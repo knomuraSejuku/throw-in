@@ -1,0 +1,441 @@
+'use client';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { AppShell } from '@/components/shell/AppShell';
+import { BarChart2, Loader2, Newspaper, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { useClipStore } from '@/lib/store';
+import ReactMarkdown from 'react-markdown';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  LineChart, Line, CartesianGrid,
+} from 'recharts';
+
+type InsightItem = {
+  id: string;
+  title: string;
+  body: string;
+  type: string;
+  category: string | null;
+  generated_at: string;
+};
+
+const INSIGHT_TYPES = [
+  { key: 'column', label: 'コラム' },
+  { key: 'weekly', label: '週次ダイジェスト' },
+  { key: 'category', label: 'カテゴリ特集' },
+] as const;
+
+const PERIODS = [
+  { key: 'day',   label: '日報', ms: 86_400_000,      jpLabel: '今日' },
+  { key: 'week',  label: '週報', ms: 604_800_000,     jpLabel: '今週' },
+  { key: 'month', label: '月報', ms: 2_592_000_000,   jpLabel: '今月' },
+  { key: 'year',  label: '年報', ms: 31_536_000_000,  jpLabel: '今年' },
+] as const;
+
+type PeriodKey = typeof PERIODS[number]['key'];
+
+const TYPE_LABELS: Record<string, string> = {
+  url: '記事', video: '動画', image: '画像', pdf: 'ドキュメント', diary: '日記・メモ',
+};
+
+function getLast8Weeks(clips: { timestamp: number }[]) {
+  const weeks: { label: string; count: number }[] = [];
+  const now = Date.now();
+  for (let i = 7; i >= 0; i--) {
+    const weekStart = now - (i + 1) * 7 * 86_400_000;
+    const weekEnd   = now - i * 7 * 86_400_000;
+    const count = clips.filter(c => c.timestamp >= weekStart && c.timestamp < weekEnd).length;
+    const d = new Date(weekEnd);
+    weeks.push({ label: `${d.getMonth() + 1}/${d.getDate()}`, count });
+  }
+  return weeks;
+}
+
+export default function InsightsPage() {
+  const { clips, fetchClips } = useClipStore();
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>('month');
+  const [report, setReport] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // AI Columns state
+  const [insights, setInsights] = useState<InsightItem[]>([]);
+  const [insightsLoading, setInsightsLoading] = useState(true);
+  const [insightType, setInsightType] = useState<'column' | 'weekly' | 'category'>('column');
+  const [insightCategory, setInsightCategory] = useState('');
+  const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => { fetchClips(); }, [fetchClips]);
+
+  const loadInsights = useCallback(async () => {
+    setInsightsLoading(true);
+    const res = await fetch('/api/generate-insight?limit=10');
+    if (res.ok) {
+      const data = await res.json();
+      setInsights(data.insights ?? []);
+    }
+    setInsightsLoading(false);
+  }, []);
+
+  useEffect(() => { loadInsights(); }, [loadInsights]);
+
+  const handleGenerateInsight = async () => {
+    const openAiKey = typeof window !== 'undefined' ? localStorage.getItem('openai_api_key') : null;
+    if (!openAiKey) {
+      setInsightError('OpenAI APIキーが設定されていません。設定画面から登録してください。');
+      return;
+    }
+    setIsGeneratingInsight(true);
+    setInsightError(null);
+    try {
+      const res = await fetch('/api/generate-insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: insightType, category: insightCategory || undefined, openAiKey }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Generation failed');
+      await loadInsights();
+      setExpandedId(data.id);
+    } catch (err: unknown) {
+      setInsightError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsGeneratingInsight(false);
+    }
+  };
+
+  const stats = useMemo(() => {
+    const total = clips.length;
+    const unread = clips.filter(c => c.isUnread).length;
+
+    const byType = Object.entries(TYPE_LABELS).map(([key, label]) => ({
+      name: label,
+      count: clips.filter(c => c.type === key).length,
+    })).filter(d => d.count > 0);
+
+    const byCat: Record<string, number> = {};
+    clips.forEach(c => { if (c.category) byCat[c.category] = (byCat[c.category] ?? 0) + 1; });
+    const byCategory = Object.entries(byCat)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, count]) => ({ name, count }));
+
+    const tagFreq: Record<string, number> = {};
+    clips.forEach(c => (c.tags ?? []).forEach(t => { tagFreq[t] = (tagFreq[t] ?? 0) + 1; }));
+    const topTags = Object.entries(tagFreq).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+    const weeklyTrend = getLast8Weeks(clips);
+
+    return { total, unread, byType, byCategory, topTags, weeklyTrend };
+  }, [clips]);
+
+  const getPeriodClips = (periodKey: PeriodKey) => {
+    const period = PERIODS.find(p => p.key === periodKey)!;
+    const cutoff = Date.now() - period.ms;
+    return clips.filter(c => c.timestamp > cutoff);
+  };
+
+  const handleGenerate = async () => {
+    const openAiKey = localStorage.getItem('openai_api_key');
+    if (!openAiKey) {
+      setError('OpenAI APIキーが設定されていません。設定画面から登録してください。');
+      return;
+    }
+    const periodClips = getPeriodClips(selectedPeriod);
+    if (periodClips.length === 0) {
+      setError('この期間に保存されたクリップがありません。');
+      return;
+    }
+    setIsGenerating(true);
+    setError(null);
+    setReport(null);
+
+    const period = PERIODS.find(p => p.key === selectedPeriod)!;
+    const clipSummaries = periodClips
+      .map(c =>
+        `【${c.typeLabel}】${c.title}` +
+        (c.summary ? `\n要約: ${c.summary}` : '') +
+        (c.tags?.length ? `\nタグ: ${c.tags.join(', ')}` : '')
+      )
+      .join('\n\n');
+
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `あなたはユーザーの知的活動をサポートするキュレーターアシスタントです。ユーザーが${period.jpLabel}保存したコンテンツの一覧を受け取り、以下の構成でMarkdown形式のレポートを生成してください。\n\n## レポート構成\n1. **概要サマリー** — ${period.jpLabel}の保存傾向を2〜3文で\n2. **主要テーマ** — 繰り返し現れるトピックやキーワード\n3. **注目コンテンツ** — 特に重要そうな記事・動画を2〜3件ピックアップして理由とともに紹介\n4. **学びのポイント** — この期間から得られる洞察や次のアクション提案\n\n日本語で記述してください。`,
+            },
+            { role: 'user', content: `${period.jpLabel}のクリップ一覧（${periodClips.length}件）:\n\n${clipSummaries}` },
+          ],
+        }),
+      });
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const data = await res.json();
+      setReport(data.choices[0].message.content);
+    } catch (err: unknown) {
+      setError(`生成に失敗しました: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <AppShell>
+      <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-10">
+
+        {/* Header */}
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold text-on-surface">インサイト</h1>
+          <p className="text-sm text-on-surface-variant">保存した情報の傾向と振り返り</p>
+        </div>
+
+        {/* AI Columns Section */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-on-surface flex items-center gap-2">
+            <Newspaper className="w-5 h-5 text-tertiary" />
+            AIコラム
+          </h2>
+
+          {/* Generator card */}
+          <div className="bg-surface-container-lowest p-6 rounded-[32px] shadow-ambient space-y-4 max-w-lg">
+            <div className="flex gap-2 flex-wrap">
+              {INSIGHT_TYPES.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setInsightType(key)}
+                  className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                    insightType === key
+                      ? 'bg-tertiary text-on-tertiary'
+                      : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {insightType === 'category' && (
+              <input
+                type="text"
+                placeholder="カテゴリ名（例: テクノロジー）"
+                value={insightCategory}
+                onChange={e => setInsightCategory(e.target.value)}
+                className="w-full px-4 py-2 rounded-full text-sm bg-surface-container-low border border-outline-variant/30 outline-none focus:border-tertiary"
+              />
+            )}
+            <button
+              onClick={handleGenerateInsight}
+              disabled={isGeneratingInsight || (insightType === 'category' && !insightCategory.trim())}
+              className="w-full py-3 bg-tertiary text-on-tertiary rounded-full font-bold shadow-lg shadow-tertiary/20 hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {isGeneratingInsight
+                ? <><Loader2 className="w-4 h-4 animate-spin" />生成中...</>
+                : <><Sparkles className="w-4 h-4" />コラムを生成</>}
+            </button>
+            {insightError && <p className="text-sm text-error">{insightError}</p>}
+          </div>
+
+          {/* Columns list */}
+          {insightsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-on-surface-variant py-4">
+              <Loader2 className="w-4 h-4 animate-spin" />読み込み中...
+            </div>
+          ) : insights.length === 0 ? (
+            <p className="text-sm text-on-surface-variant">まだコラムがありません。上のボタンで生成してみてください。</p>
+          ) : (
+            <div className="space-y-3 max-w-2xl">
+              {insights.map(item => (
+                <div key={item.id} className="bg-surface-container-lowest rounded-[24px] shadow-ambient overflow-hidden">
+                  <button
+                    onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                    className="w-full flex items-start justify-between gap-3 p-5 text-left hover:bg-surface-container-low transition-colors"
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-tertiary/10 text-tertiary">
+                          {INSIGHT_TYPES.find(t => t.key === item.type)?.label ?? item.type}
+                        </span>
+                        {item.category && (
+                          <span className="text-[10px] text-outline">{item.category}</span>
+                        )}
+                        <span className="text-[10px] text-outline">
+                          {new Date(item.generated_at).toLocaleDateString('ja-JP')}
+                        </span>
+                      </div>
+                      <p className="font-bold text-on-surface text-sm leading-snug">{item.title}</p>
+                    </div>
+                    {expandedId === item.id
+                      ? <ChevronUp className="w-4 h-4 text-outline flex-shrink-0 mt-1" />
+                      : <ChevronDown className="w-4 h-4 text-outline flex-shrink-0 mt-1" />}
+                  </button>
+                  {expandedId === item.id && (
+                    <div className="px-5 pb-6 prose prose-sm max-w-none text-on-surface border-t border-outline-variant/10 pt-4">
+                      <ReactMarkdown>{item.body}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: '総クリップ数', value: stats.total },
+            { label: '未読', value: stats.unread },
+            { label: '既読', value: stats.total - stats.unread },
+            { label: '未読率', value: stats.total > 0 ? `${Math.round(stats.unread / stats.total * 100)}%` : '—' },
+          ].map(({ label, value }) => (
+            <div key={label} className="bg-surface-container-lowest rounded-[24px] p-4 space-y-1 shadow-ambient">
+              <p className="text-xs text-on-surface-variant">{label}</p>
+              <p className="text-2xl font-bold text-on-surface">{value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* 未読/既読 progress */}
+        {stats.total > 0 && (
+          <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-ambient space-y-3">
+            <p className="text-sm font-bold text-on-surface">未読 / 既読</p>
+            <div className="w-full h-3 bg-surface-container-high rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${Math.round((stats.total - stats.unread) / stats.total * 100)}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-on-surface-variant">
+              <span>既読 {stats.total - stats.unread}件</span>
+              <span>未読 {stats.unread}件</span>
+            </div>
+          </div>
+        )}
+
+        {/* 週次推移 */}
+        {stats.total > 0 && (
+          <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-ambient space-y-4">
+            <p className="text-sm font-bold text-on-surface">過去8週の保存推移</p>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={stats.weeklyTrend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" strokeOpacity={0.3} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} />
+                <Tooltip
+                  contentStyle={{ background: 'var(--color-surface-container)', border: 'none', borderRadius: 12, fontSize: 12 }}
+                  labelStyle={{ color: 'var(--color-on-surface)' }}
+                />
+                <Line type="monotone" dataKey="count" stroke="var(--color-primary)" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* コンテンツタイプ別 */}
+        {stats.byType.length > 0 && (
+          <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-ambient space-y-4">
+            <p className="text-sm font-bold text-on-surface">コンテンツタイプ別</p>
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={stats.byType} layout="vertical">
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} width={72} />
+                <Tooltip
+                  contentStyle={{ background: 'var(--color-surface-container)', border: 'none', borderRadius: 12, fontSize: 12 }}
+                  labelStyle={{ color: 'var(--color-on-surface)' }}
+                />
+                <Bar dataKey="count" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* カテゴリ別 */}
+        {stats.byCategory.length > 0 && (
+          <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-ambient space-y-4">
+            <p className="text-sm font-bold text-on-surface">カテゴリ別</p>
+            <ResponsiveContainer width="100%" height={Math.max(140, stats.byCategory.length * 36)}>
+              <BarChart data={stats.byCategory} layout="vertical">
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} width={120} />
+                <Tooltip
+                  contentStyle={{ background: 'var(--color-surface-container)', border: 'none', borderRadius: 12, fontSize: 12 }}
+                  labelStyle={{ color: 'var(--color-on-surface)' }}
+                />
+                <Bar dataKey="count" fill="var(--color-tertiary)" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* 頻出タグ TOP10 */}
+        {stats.topTags.length > 0 && (
+          <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-ambient space-y-4">
+            <p className="text-sm font-bold text-on-surface">頻出タグ TOP{stats.topTags.length}</p>
+            <div className="space-y-2">
+              {stats.topTags.map(([tag, count], i) => (
+                <div key={tag} className="flex items-center gap-3">
+                  <span className="text-xs text-on-surface-variant w-4 text-right">{i + 1}</span>
+                  <div className="flex-1 h-6 bg-surface-container-high rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-secondary/70 rounded-full"
+                      style={{ width: `${Math.round(count / stats.topTags[0][1] * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-mono text-on-surface-variant min-w-[80px] truncate">#{tag}</span>
+                  <span className="text-xs text-on-surface-variant w-6 text-right">{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* AIレポートセクション */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-on-surface flex items-center gap-2">
+            <BarChart2 className="w-5 h-5 text-primary" />
+            AIレポート
+          </h2>
+
+          <div className="bg-surface-container-lowest p-6 rounded-[32px] shadow-ambient space-y-5 max-w-lg">
+            <div className="flex gap-2">
+              {PERIODS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => { setSelectedPeriod(key); setReport(null); setError(null); }}
+                  className={`flex-1 py-3 text-sm font-bold rounded-2xl transition-colors ${
+                    selectedPeriod === key
+                      ? 'bg-primary-container text-on-primary-container'
+                      : 'text-on-surface-variant hover:bg-surface-container-low'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              className="w-full py-4 text-white bg-primary rounded-full font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" />生成中...</> : '生成する'}
+            </button>
+          </div>
+
+          {error && (
+            <div className="max-w-2xl bg-error/10 text-error p-4 rounded-2xl text-sm">{error}</div>
+          )}
+          {report && (
+            <div className="max-w-2xl bg-surface-container-lowest p-8 rounded-[32px] shadow-ambient prose prose-sm max-w-none text-on-surface">
+              <ReactMarkdown>{report}</ReactMarkdown>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </AppShell>
+  );
+}

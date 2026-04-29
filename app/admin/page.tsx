@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/components/shell/AppShell';
 import { Activity, Database, LayoutTemplate, ShieldAlert, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useClipStore } from '@/lib/store';
 
@@ -94,23 +95,23 @@ export default function AdminPage() {
 
         {/* Navigation Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-surface-container-lowest p-8 border border-outline-variant/20 rounded-[32px] hover:shadow-card-hover transition-all cursor-pointer">
+          <Link href="/admin/jobs" className="bg-surface-container-lowest p-8 border border-outline-variant/20 rounded-[32px] hover:shadow-card-hover transition-all cursor-pointer block">
             <Database className="w-8 h-8 text-primary mb-4" />
             <h3 className="text-lg font-bold text-on-surface mb-2">ジョブ管理</h3>
             <p className="text-sm text-on-surface-variant">待機中、実行中、失敗したバックグラウンドジョブを確認し、再試行します。</p>
-          </div>
+          </Link>
 
-          <div className="bg-surface-container-lowest p-8 border border-outline-variant/20 rounded-[32px] hover:shadow-card-hover transition-all cursor-pointer">
+          <Link href="/admin/cards" className="bg-surface-container-lowest p-8 border border-outline-variant/20 rounded-[32px] hover:shadow-card-hover transition-all cursor-pointer block">
             <LayoutTemplate className="w-8 h-8 text-tertiary mb-4" />
             <h3 className="text-lg font-bold text-on-surface mb-2">公開カードレビュー</h3>
             <p className="text-sm text-on-surface-variant">生成された公開カード候補の審査、承認、抑制を行います。</p>
-          </div>
+          </Link>
 
-          <div className="bg-surface-container-lowest p-8 border border-outline-variant/20 rounded-[32px] hover:shadow-card-hover transition-all cursor-pointer">
+          <Link href="/admin/users" className="bg-surface-container-lowest p-8 border border-outline-variant/20 rounded-[32px] hover:shadow-card-hover transition-all cursor-pointer block">
             <ShieldAlert className="w-8 h-8 text-secondary mb-4" />
             <h3 className="text-lg font-bold text-on-surface mb-2">ユーザー管理</h3>
             <p className="text-sm text-on-surface-variant">PRO権限の付与、クオータ調整、アカウントの可視性を管理します。</p>
-          </div>
+          </Link>
         </div>
 
         {/* Stats Breakdown */}
