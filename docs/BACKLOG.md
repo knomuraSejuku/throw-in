@@ -251,9 +251,13 @@
     8. ユーザー側でSSH認証復旧済み
     9. `git push origin main` 成功
        - `04a8a5e..c95f8b9  main -> main`
+    10. Vercel本番URL発行済み: `https://throw-in.vercel.app/`
+    11. 本番URLのHTTP確認済み
+       - `/` は未ログインで `/login` へ `307`
+       - `/login` は `200`
+       - `/privacy` は `200`
   - **次にやること:**
-    1. Vercel DashboardでGitHub repo `knomuraSejuku/throw-in` をImport
-    2. Vercel Environment Variablesを設定
+    1. Vercel Environment VariablesがProduction/Previewに揃っているか確認
        - Production:
          - `NEXT_PUBLIC_SUPABASE_URL`
          - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -264,9 +268,11 @@
          - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
          - `OPENAI_API_KEY`（Sensitive）
        - `SUPABASE_SERVICE_ROLE_KEY` はPreviewには原則入れない
-    3. Supabase Auth Redirect URLにVercel本番URLを追加
+    2. Supabase Auth Redirect URLにVercel本番URLを追加
        - `https://<production-domain>/auth/callback`
        - Previewを使うならVercel preview URLのallowlistも追加
+       - 今回の本番URL: `https://throw-in.vercel.app/auth/callback`
+    3. 本番でログイン→クリップ一覧表示→クリップ保存→AI処理を手動確認
   - **注意:**
     - `vercel env pull` は使わない。Secretをローカルへ戻す事故を避ける
     - `SUPABASE_SERVICE_ROLE_KEY` / `OPENAI_API_KEY` はチャットに貼らない
