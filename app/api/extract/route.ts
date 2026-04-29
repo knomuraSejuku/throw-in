@@ -4,6 +4,8 @@ import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import * as cheerio from 'cheerio';
 
+export const runtime = 'nodejs';
+
 function isPrivateIP(ip: string): boolean {
   // IPv4
   const parts = ip.split('.').map(Number);
@@ -20,6 +22,14 @@ function isPrivateIP(ip: string): boolean {
     return true;
   }
   return false;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function normalizeText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 export async function POST(req: NextRequest) {
@@ -126,16 +136,34 @@ export async function POST(req: NextRequest) {
     const ogDescription = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content') || $('meta[name="twitter:description"]').attr('content') || '';
     const ogImage = $('meta[property="og:image"]').attr('content') || $('meta[name="twitter:image"]').attr('content') || '';
 
-    // 2. Readability for main content extraction
-    const doc = new JSDOM(html, { url });
-    const reader = new Readability(doc.window.document);
-    const article = reader.parse();
+    // 2. Readability for main content extraction. Keep metadata extraction usable
+    // even when Readability/JSDOM cannot parse a specific page in production.
+    let article: {
+      title?: string | null;
+      excerpt?: string | null;
+      textContent?: string | null;
+    } | null = null;
+
+    try {
+      const doc = new JSDOM(html, { url });
+      const reader = new Readability(doc.window.document);
+      article = reader.parse();
+    } catch (readabilityError) {
+      console.warn('Readability extraction failed:', {
+        url,
+        error: getErrorMessage(readabilityError),
+      });
+    }
+
+    const fallbackBody = normalizeText(
+      $('article').text() || $('main').text() || $('body').text()
+    ).slice(0, 30000);
 
     return NextResponse.json({
       title: ogTitle || pageTitle || article?.title || null,
       description: ogDescription || article?.excerpt || null,
       thumbnail: ogImage || null,
-      body: article?.content?.trim() || null,
+      body: article?.textContent?.trim() || fallbackBody || ogDescription || null,
       domain: parsedUrl.hostname,
     });
 
@@ -143,7 +171,10 @@ export async function POST(req: NextRequest) {
     if (error.name === 'AbortError') {
       return NextResponse.json({ error: 'Request timed out' }, { status: 504 });
     }
-    console.error('Extraction error:', error);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+    console.error('Extraction error:', {
+      error: getErrorMessage(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return NextResponse.json({ error: getErrorMessage(error) || 'Internal server error' }, { status: 500 });
   }
 }

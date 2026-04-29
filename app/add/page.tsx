@@ -20,6 +20,25 @@ const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
   reader.onerror = error => reject(error);
 });
 
+const readApiError = async (response: Response): Promise<string> => {
+  try {
+    const data = await response.clone().json();
+    if (data?.error) return String(data.error);
+    if (data?.detail) return String(data.detail);
+  } catch {
+    // Fall back to text below.
+  }
+
+  try {
+    const text = await response.text();
+    if (text) return text.slice(0, 300);
+  } catch {
+    // Fall back to status text below.
+  }
+
+  return response.statusText || `HTTP ${response.status}`;
+};
+
 function AddClipForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -245,7 +264,9 @@ function AddClipForm() {
                    }
                  } catch(e) {}
              } else {
-                 throw new Error("YouTube transcript fetch failed");
+                 const message = await readApiError(ytRes);
+                 console.warn("YouTube transcript fetch failed", message);
+                 setWarnMsg(`YouTube字幕の取得に失敗しました。タイトル取得だけで保存します。(${message})`);
              }
           } else {
             const extRes = await fetch('/api/extract', {
@@ -256,19 +277,15 @@ function AddClipForm() {
             if (extRes.ok) {
               extractedData = await extRes.json();
             } else {
-               const message = await extRes.text();
+               const message = await readApiError(extRes);
                console.warn("Extraction failed", message);
-               throw new Error(`URLの本文抽出に失敗しました。URLを確認するか、メモとして保存してください。(${extRes.status})`);
+               setWarnMsg(`URLの本文抽出に失敗しました。タイトル未取得のまま保存します。(${message})`);
             }
           }
         } catch(e) {
           console.warn("Extraction failed", e);
-          if (e instanceof Error) throw e;
-          throw new Error("URLの本文抽出に失敗しました。URLを確認するか、メモとして保存してください。");
-        }
-
-        if (!extractedData?.title && !extractedData?.body) {
-          throw new Error("URLからタイトルや本文を取得できませんでした。別のURLを試すか、メモとして保存してください。");
+          const message = e instanceof Error ? e.message : '不明なエラー';
+          setWarnMsg(`URLの本文抽出に失敗しました。タイトル未取得のまま保存します。(${message})`);
         }
       }
 

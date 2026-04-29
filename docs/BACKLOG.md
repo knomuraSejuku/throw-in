@@ -204,6 +204,8 @@
   - **追加ユーザー報告:**
     - 詳細画面に「AI処理に失敗しました。再処理をお試しください。」と表示
     - AI整理だけでなく、タイトルも原文も取得されていない
+    - URL保存時に「URLの本文抽出に失敗しました。URLを確認するか、メモとして保存してください。(500)」と表示
+    - 以前はURL保存自体はできていたため、直近修正で「抽出失敗を保存停止へ変えた」ことがユーザー体験上の退行になっている
   - **追加切り分け:**
     - URL保存時、`/api/extract` 失敗を `console.warn` だけで握りつぶし、`無題の記事` として保存する実装だった
     - その結果 `extracted_content` が空になり、AI処理に渡す `contentForAi` も空/短文になりやすい
@@ -213,16 +215,26 @@
     2. URLからタイトル/本文のどちらも取得できない場合も保存前に止める
     3. `processClipAI` は空contentならAPIを叩かずfailedにする
     4. `processClipAI` 失敗時にレスポンス本文の先頭をログへ出し、原因を追いやすくする
+  - **追加修正2（退行対応）:**
+    1. URL抽出API失敗時もクリップ保存自体は継続し、警告表示に戻す
+       - 抽出失敗を握りつぶして完全に無言保存するのではなく、保存は通しつつ「タイトル未取得のまま保存」を明示する
+       - 本文が取れない場合はAI整理をスキップ/失敗扱いにし、無駄なOpenAI呼び出しを避ける
+    2. `/api/extract` を明示的にNode.js runtimeへ固定
+       - `dns/promises`, `jsdom`, `@mozilla/readability`, `pdf-parse` 系の依存をEdge runtimeへ誤判定させない
+    3. Readability/JSDOMの本文抽出だけが失敗してもAPI全体を500にせず、Cheerioで `article` / `main` / `body` テキストからフォールバック本文を返す
+    4. URL抽出失敗時のレスポンス本文 `{ error }` をクライアント側で読み取り、Vercelログなしでも原因を見やすくする
   - **次にやること:**
-    1. 本番でクリップを追加または詳細画面からAI再処理
-    2. Vercel Function Logsで `OpenAI metadata request failed` / `Failed to persist AI metadata` 等を確認
-    3. ログ内容に応じてOpenAIモデル/API形式、Supabaseスキーマ、RLSのどれが原因か切り分ける
-    4. 既に「無題の記事」として保存された本文なしクリップは、URL抽出が再実行されないため、削除して再保存するか、URL再抽出機能を別途実装する
+    1. 本番でURLクリップを追加し、保存自体が通ることを確認
+    2. 本文が取得できたクリップでsummary/tags/category/key_pointsが保存されることを確認
+    3. まだ警告が出る場合は、画面に表示される `{ error }` 文言とVercel Function Logsの `Extraction error` / `Readability extraction failed` を照合
+    4. Vercel Function Logsで `OpenAI metadata request failed` / `Failed to persist AI metadata` 等を確認
+    5. ログ内容に応じてOpenAIモデル/API形式、Supabaseスキーマ、RLSのどれが原因か切り分ける
+    6. 既に「無題の記事」として保存された本文なしクリップは、URL抽出が再実行されないため、削除して再保存するか、URL再抽出機能を別途実装する
   - **受け入れ条件:**
     - 本番で `GET /api/health/ai` が `openaiConfigured: true` を返す（達成済み）
     - 新規クリップ保存後にsummary/tags/category/key_pointsが保存される
     - 失敗時にVercel Logsで原因を追える
-  - ファイル: `app/api/process-ai/route.ts`, `app/api/health/ai/route.ts`, `lib/openai-config.ts`, `middleware.ts`, `lib/store.ts`, `app/add/page.tsx`, Vercel Environment Variables
+  - ファイル: `app/api/process-ai/route.ts`, `app/api/health/ai/route.ts`, `app/api/extract/route.ts`, `lib/openai-config.ts`, `middleware.ts`, `lib/store.ts`, `app/add/page.tsx`, Vercel Environment Variables
 
 - [ ] **J12** Secrets管理安全化 — `.env.local` に実APIキーを置かない運用へ移行
   - **背景:** AIコーディングエージェントが同じワークスペースを読める環境では、`.env.local` に実APIキーを書く運用自体がリスクになる
