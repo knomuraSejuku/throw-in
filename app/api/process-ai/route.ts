@@ -14,6 +14,20 @@ const CATEGORY_TAXONOMY: Record<string, string[]> = {
   'Other':       ['その他'],
 };
 
+async function getOpenAIError(response: Response) {
+  const text = await response.text().catch(() => '');
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    body: text.slice(0, 1000),
+  };
+}
+
+export async function GET() {
+  const openAiKey = process.env.OPENAI_API_KEY;
+  return NextResponse.json({ openaiConfigured: Boolean(openAiKey) });
+}
+
 export async function POST(req: NextRequest) {
   const openAiKey = process.env.OPENAI_API_KEY;
   if (!openAiKey) return NextResponse.json({ error: 'AI processing unavailable' }, { status: 503 });
@@ -92,9 +106,18 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
         aiSubcategory = parsed.subcategory || null;
         aiKeyPoints = parsed.key_points || null;
       } catch { /* parse error, retry */ }
-      break;
+      if (aiSummary || newTags.length > 0 || aiCategory || aiKeyPoints) {
+        break;
+      }
+
+      console.error('OpenAI response did not contain parseable metadata', { outputText: outputText.slice(0, 500) });
+      if (attempt >= MAX_RETRIES) {
+        return NextResponse.json({ error: 'AI response was not parseable' }, { status: 502 });
+      }
     } else if (attempt >= MAX_RETRIES) {
-      return NextResponse.json({ error: 'AI request failed' }, { status: 502 });
+      const errorInfo = await getOpenAIError(aiRes);
+      console.error('OpenAI metadata request failed', errorInfo);
+      return NextResponse.json({ error: 'AI request failed', detail: errorInfo.statusText || String(errorInfo.status) }, { status: 502 });
     } else {
       await new Promise(r => setTimeout(r, 2000));
     }
@@ -112,8 +135,12 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
     if (embedRes.ok) {
       const embedData = await embedRes.json();
       embeddingVector = embedData.data[0].embedding;
+    } else {
+      console.error('OpenAI embedding request failed', await getOpenAIError(embedRes));
     }
-  } catch { /* non-fatal */ }
+  } catch (err) {
+    console.error('Embedding generation threw', err);
+  }
 
   const mergedTags = Array.from(new Set([...existingTags, ...newTags]));
 
@@ -123,11 +150,19 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
   if (aiCategory) dbUpdate.category = aiCategory;
   if (aiSubcategory) dbUpdate.subcategory = aiSubcategory;
   if (aiKeyPoints) dbUpdate.key_points = aiKeyPoints;
-  await supabase.from('clips').update(dbUpdate).eq('id', clipId);
+  const { error: updateError } = await supabase.from('clips').update(dbUpdate).eq('id', clipId);
+  if (updateError) {
+    console.error('Failed to persist AI metadata', updateError);
+    return NextResponse.json({ error: 'Failed to persist AI metadata', detail: updateError.message }, { status: 500 });
+  }
 
   if (mergedTags.length > 0) {
     await supabase.from('clip_tags').delete().eq('clip_id', clipId);
-    await supabase.from('clip_tags').insert(mergedTags.map(t => ({ clip_id: clipId, name: t, user_id: user.id })));
+    const { error: tagError } = await supabase.from('clip_tags').insert(mergedTags.map(t => ({ clip_id: clipId, name: t, user_id: user.id })));
+    if (tagError) {
+      console.error('Failed to persist AI tags', tagError);
+      return NextResponse.json({ error: 'Failed to persist AI tags', detail: tagError.message }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ summary: aiSummary, tags: mergedTags, category: aiCategory, subcategory: aiSubcategory, keyPoints: aiKeyPoints });
@@ -156,7 +191,10 @@ export async function PUT(req: NextRequest) {
     body: JSON.stringify({ model: 'text-embedding-3-small', input: query }),
   });
 
-  if (!embedRes.ok) return NextResponse.json({ error: 'Embedding failed' }, { status: 502 });
+  if (!embedRes.ok) {
+    console.error('OpenAI search embedding request failed', await getOpenAIError(embedRes));
+    return NextResponse.json({ error: 'Embedding failed' }, { status: 502 });
+  }
   const embedData = await embedRes.json();
   const queryEmbedding = embedData.data[0].embedding;
 
@@ -189,7 +227,10 @@ export async function PATCH(req: NextRequest) {
     }),
   });
 
-  if (!res.ok) return NextResponse.json({ error: 'Translation failed' }, { status: 502 });
+  if (!res.ok) {
+    console.error('OpenAI translation request failed', await getOpenAIError(res));
+    return NextResponse.json({ error: 'Translation failed' }, { status: 502 });
+  }
   const data = await res.json();
   const translated = data.output?.find((o: { type: string }) => o.type === 'message')
     ?.content?.find((c: { type: string }) => c.type === 'output_text')?.text ?? null;
