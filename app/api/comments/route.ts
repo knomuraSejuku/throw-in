@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   if (!clipId) return NextResponse.json({ error: 'clipId required' }, { status: 400 });
 
   // Verify clip is public
-  const { data: clip } = await anonClient.from('clips').select('id').eq('id', clipId).eq('is_public', true).single();
+  const { data: clip } = await anonClient.from('clips').select('id').eq('id', clipId).eq('is_global_search', true).single();
   if (!clip) return NextResponse.json({ error: 'Clip not found or not public' }, { status: 404 });
 
   // Fetch comments
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     .from('clip_comments')
     .select(`
       id, content, parent_id, created_at, user_id,
-      profiles:user_id ( display_name, avatar_emoji )
+      users:user_id ( display_name, avatar_emoji )
     `)
     .eq('clip_id', clipId)
     .order('created_at', { ascending: true });
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     if (!clipId || !content?.trim()) return NextResponse.json({ error: 'clipId and content required' }, { status: 400 });
 
     // Verify clip is public
-    const { data: clip } = await anonClient.from('clips').select('user_id').eq('id', clipId).eq('is_public', true).single();
+    const { data: clip } = await anonClient.from('clips').select('user_id').eq('id', clipId).eq('is_global_search', true).single();
     if (!clip) return NextResponse.json({ error: 'Clip not found or not public' }, { status: 404 });
 
     const { data: comment, error } = await supabase

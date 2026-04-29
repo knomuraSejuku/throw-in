@@ -81,18 +81,13 @@ export default function InsightsPage() {
   useEffect(() => { loadInsights(); }, [loadInsights]);
 
   const handleGenerateInsight = async () => {
-    const openAiKey = typeof window !== 'undefined' ? localStorage.getItem('openai_api_key') : null;
-    if (!openAiKey) {
-      setInsightError('OpenAI APIキーが設定されていません。設定画面から登録してください。');
-      return;
-    }
     setIsGeneratingInsight(true);
     setInsightError(null);
     try {
       const res = await fetch('/api/generate-insight', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: insightType, category: insightCategory || undefined, openAiKey }),
+        body: JSON.stringify({ type: insightType, category: insightCategory || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Generation failed');
@@ -137,11 +132,6 @@ export default function InsightsPage() {
   };
 
   const handleGenerate = async () => {
-    const openAiKey = localStorage.getItem('openai_api_key');
-    if (!openAiKey) {
-      setError('OpenAI APIキーが設定されていません。設定画面から登録してください。');
-      return;
-    }
     const periodClips = getPeriodClips(selectedPeriod);
     if (periodClips.length === 0) {
       setError('この期間に保存されたクリップがありません。');
@@ -151,7 +141,6 @@ export default function InsightsPage() {
     setError(null);
     setReport(null);
 
-    const period = PERIODS.find(p => p.key === selectedPeriod)!;
     const clipSummaries = periodClips
       .map(c =>
         `【${c.typeLabel}】${c.title}` +
@@ -161,23 +150,18 @@ export default function InsightsPage() {
       .join('\n\n');
 
     try {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      const res = await fetch('/api/generate-report', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `あなたはユーザーの知的活動をサポートするキュレーターアシスタントです。ユーザーが${period.jpLabel}保存したコンテンツの一覧を受け取り、以下の構成でMarkdown形式のレポートを生成してください。\n\n## レポート構成\n1. **概要サマリー** — ${period.jpLabel}の保存傾向を2〜3文で\n2. **主要テーマ** — 繰り返し現れるトピックやキーワード\n3. **注目コンテンツ** — 特に重要そうな記事・動画を2〜3件ピックアップして理由とともに紹介\n4. **学びのポイント** — この期間から得られる洞察や次のアクション提案\n\n日本語で記述してください。`,
-            },
-            { role: 'user', content: `${period.jpLabel}のクリップ一覧（${periodClips.length}件）:\n\n${clipSummaries}` },
-          ],
+          periodKey: selectedPeriod,
+          clipSummaries,
+          clipCount: periodClips.length,
         }),
       });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
-      setReport(data.choices[0].message.content);
+      setReport(data.report);
     } catch (err: unknown) {
       setError(`生成に失敗しました: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

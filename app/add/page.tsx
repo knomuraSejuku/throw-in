@@ -203,37 +203,23 @@ function AddClipForm() {
               setWarnMsg('PDFのテキスト抽出に失敗しました。クリップは保存されますが、AI処理の精度が下がる場合があります。');
             }
           } else if (file.type.startsWith('image/')) {
-            const openAiKey = localStorage.getItem('openai_api_key');
-            if (openAiKey) {
-              const base64Data = await toBase64(file);
-              const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            const base64Data = await toBase64(file);
+            const response = await fetch('/api/ocr-image', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${openAiKey}`
                 },
                 body: JSON.stringify({
-                  model: 'gpt-4o', // Assuming GPT-4o for vision tasks, as GPT-5.4-nano is a placeholder
-                  messages: [
-                    {
-                      role: 'user',
-                      content: [
-                        { type: 'text', text: 'Extract the text from this document or image. Output ONLY the extracted text with no other commentary.' },
-                        { type: 'image_url', image_url: { url: `data:${file.type};base64,${base64Data}` } }
-                      ]
-                    }
-                  ]
+                  mimeType: file.type,
+                  base64: base64Data,
                 })
               });
               if (response.ok) {
                  const data = await response.json();
-                 extractedData = { body: data.choices[0].message.content };
+                 extractedData = { body: data.text };
               } else {
                 setWarnMsg('画像のOCR処理に失敗しました。クリップは保存されますが、テキスト抽出ができませんでした。');
               }
-            } else {
-              setWarnMsg('OpenAI APIキーが設定されていないため、画像のOCR処理をスキップしました。設定画面からAPIキーを登録できます。');
-            }
           }
         } catch(e) {
           setWarnMsg('ファイルの読み取り中にエラーが発生しました。クリップは保存されますが、テキスト抽出ができませんでした。');

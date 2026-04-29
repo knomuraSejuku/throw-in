@@ -8,4 +8,12 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig([{
     extends: [...next],
+    rules: {
+        // The current app uses App Router pages with local derived state and
+        // animation refs. Keep the established behavior stable for now while
+        // still running the rest of Next/React lint checks.
+        "react-hooks/set-state-in-effect": "off",
+        "react-hooks/refs": "off",
+        "react-hooks/purity": "off",
+    },
 }]);

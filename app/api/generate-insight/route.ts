@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 // POST /api/generate-insight
-// Body: { type: 'column'|'weekly'|'category', category?: string, openAiKey: string }
+// Body: { type: 'column'|'weekly'|'category', category?: string }
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null);
-  const { type = 'column', category, openAiKey } = body ?? {};
+  const openAiKey = process.env.OPENAI_API_KEY;
+  if (!openAiKey) return NextResponse.json({ error: 'AI processing unavailable' }, { status: 503 });
 
-  if (!openAiKey) return NextResponse.json({ error: 'openAiKey required' }, { status: 400 });
+  const body = await req.json().catch(() => null);
+  const { type = 'column', category } = body ?? {};
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

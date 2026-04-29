@@ -30,7 +30,7 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 -- clip_comments: anyone can read comments on public clips; authed users can insert their own; delete own
 CREATE POLICY "read comments on public clips" ON clip_comments FOR SELECT
-  USING (EXISTS (SELECT 1 FROM clips WHERE id = clip_id AND is_public = true));
+  USING (EXISTS (SELECT 1 FROM clips WHERE id = clip_id AND is_global_search = true));
 
 CREATE POLICY "insert own comment" ON clip_comments FOR INSERT
   WITH CHECK (auth.uid() = user_id);

@@ -3,6 +3,13 @@ import dns from 'dns/promises';
 
 export const runtime = 'nodejs';
 
+const EXTRACT_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (compatible; ThrowInAppBot/1.0; +https://example.com)',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+};
+
+const MAX_REDIRECTS = 5;
+
 function isPrivateIP(ip: string): boolean {
   // IPv4
   const parts = ip.split('.').map(Number);
@@ -19,6 +26,36 @@ function isPrivateIP(ip: string): boolean {
     return true;
   }
   return false;
+}
+
+function isBlockedHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === 'localhost' || normalized.endsWith('.localhost');
+}
+
+async function assertPublicUrl(url: URL) {
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new ResponseError('Invalid protocol. Only HTTP and HTTPS are allowed.', 400);
+  }
+  if (isBlockedHostname(url.hostname)) {
+    throw new ResponseError('Access to localhost is blocked due to SSRF protection', 403);
+  }
+
+  try {
+    const results = await dns.lookup(url.hostname, { all: true });
+    if (results.some(result => isPrivateIP(result.address))) {
+      throw new ResponseError('Access to private IPs is blocked due to SSRF protection', 403);
+    }
+  } catch (error) {
+    if (error instanceof ResponseError) throw error;
+    console.warn(`DNS lookup failed for ${url.hostname}`, error);
+  }
+}
+
+class ResponseError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
 }
 
 function getErrorMessage(error: unknown): string {
@@ -90,6 +127,32 @@ function extractMainText(html: string): string {
   return htmlToText(bodyMatch?.[1] || html);
 }
 
+async function fetchPublicUrl(url: URL, init?: RequestInit, redirectCount = 0): Promise<Response> {
+  if (redirectCount > MAX_REDIRECTS) {
+    throw new ResponseError('Too many redirects', 508);
+  }
+
+  await assertPublicUrl(url);
+
+  const response = await fetch(url.toString(), {
+    ...init,
+    redirect: 'manual',
+  });
+
+  if ([301, 302, 303, 307, 308].includes(response.status)) {
+    const location = response.headers.get('location');
+    if (!location) {
+      throw new ResponseError('Redirect response did not include Location header', 502);
+    }
+
+    const nextUrl = new URL(location, url);
+    await assertPublicUrl(nextUrl);
+    return fetchPublicUrl(nextUrl, init, redirectCount + 1);
+  }
+
+  return response;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { url } = await req.json();
@@ -105,20 +168,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
     }
 
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      return NextResponse.json({ error: 'Invalid protocol. Only HTTP and HTTPS are allowed.' }, { status: 400 });
-    }
-
-    // SSRF Check: resolve IP and block local/private ranges.
-    // NOTE: In advanced SSRF guards, we also need to prevent redirecting to private IPs.
-    try {
-      const result = await dns.lookup(parsedUrl.hostname);
-      if (isPrivateIP(result.address)) {
-        return NextResponse.json({ error: 'Access to private IPs is blocked due to SSRF protection' }, { status: 403 });
-      }
-    } catch (e: any) {
-      console.warn(`DNS lookup failed for ${parsedUrl.hostname}`, e);
-    }
+    await assertPublicUrl(parsedUrl);
 
     // Google Workspace URL detection
     if (parsedUrl.hostname === 'docs.google.com') {
@@ -130,7 +180,7 @@ export async function POST(req: NextRequest) {
       if (docMatch) {
         const docId = docMatch[1];
         const exportUrl = `https://docs.google.com/document/d/${docId}/export?format=txt`;
-        const res = await fetch(exportUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ThrowInAppBot/1.0)' } });
+        const res = await fetchPublicUrl(new URL(exportUrl), { headers: EXTRACT_HEADERS });
         if (!res.ok) return NextResponse.json({ error: `Google Docs export failed: ${res.statusText}` }, { status: res.status });
         const text = await res.text();
         const title = text.split('\n')[0]?.trim() || 'Google Doc';
@@ -140,7 +190,7 @@ export async function POST(req: NextRequest) {
       if (slideMatch) {
         const slideId = slideMatch[1];
         const exportUrl = `https://docs.google.com/presentation/d/${slideId}/export/pdf`;
-        const res = await fetch(exportUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ThrowInAppBot/1.0)' } });
+        const res = await fetchPublicUrl(new URL(exportUrl), { headers: EXTRACT_HEADERS });
         if (!res.ok) return NextResponse.json({ error: `Google Slides export failed: ${res.statusText}` }, { status: res.status });
         // @ts-ignore
         const pdfParse = (await import('pdf-parse')).default;
@@ -153,7 +203,7 @@ export async function POST(req: NextRequest) {
       if (sheetMatch) {
         const sheetId = sheetMatch[1];
         const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
-        const res = await fetch(exportUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ThrowInAppBot/1.0)' } });
+        const res = await fetchPublicUrl(new URL(exportUrl), { headers: EXTRACT_HEADERS });
         if (!res.ok) return NextResponse.json({ error: `Google Sheets export failed: ${res.statusText}` }, { status: res.status });
         const csv = await res.text();
         const body = csv.split('\n').map(row => row.replace(/,/g, '\t')).join('\n');
@@ -165,11 +215,8 @@ export async function POST(req: NextRequest) {
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), 15000);
 
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; ThrowInAppBot/1.0; +https://example.com)',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-      },
+    const response = await fetchPublicUrl(parsedUrl, {
+      headers: EXTRACT_HEADERS,
       signal: abortController.signal
     });
 
@@ -204,6 +251,9 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: any) {
+    if (error instanceof ResponseError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     if (error.name === 'AbortError') {
       return NextResponse.json({ error: 'Request timed out' }, { status: 504 });
     }

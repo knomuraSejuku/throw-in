@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     .from('clips')
     .select('*')
     .eq('id', clipId)
-    .eq('is_public', true)
+    .eq('is_global_search', true)
     .single();
 
   if (srcErr || !src) return NextResponse.json({ error: 'Clip not found or not public' }, { status: 404 });
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     embedding: src.embedding,
     category: src.category,
     subcategory: src.subcategory,
-    is_public: false,
+    is_global_search: false,
     saved_from_clip_id: clipId,
   });
 

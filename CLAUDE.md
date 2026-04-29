@@ -17,14 +17,16 @@ npm run clean    # Next.js キャッシュ削除
 
 テスト設定は現時点で未構築。
 
-## 環境変数（`.env.local` に設定）
+## 環境変数
 
 | 変数 | 説明 |
 |------|------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase プロジェクト URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase 匿名キー |
+| `OPENAI_API_KEY` | AI処理用（サーバーのみ。Vercel Environment Variablesに設定） |
+| `SUPABASE_SERVICE_ROLE_KEY` | アカウント削除用（サーバーのみ。Vercel Environment Variablesに設定） |
 
-OpenAI API キーはユーザーがアプリの設定画面から入力し `localStorage` の `openai_api_key` に保存される（サーバーサイドには渡さない）。
+ローカルの `.env.local` には原則として公開Supabase値だけを置く。本番の `OPENAI_API_KEY` / `SUPABASE_SERVICE_ROLE_KEY` はローカルファイルに置かず、VercelのEnvironment Variablesで管理する。コーディングエージェントは `.env*` の中身を表示しない。
 
 ## アーキテクチャ
 
@@ -63,15 +65,17 @@ pgvector 有効化済み（`supabase/01_pgvector.sql`）。クリップの `embe
 ### AI 処理パイプライン
 
 `lib/store.ts` の `processClipAI()`:
-1. `localStorage` から OpenAI キー取得
-2. OpenAI `gpt-4o-mini` で要約とタグを JSON 生成（日本語プロンプト）
+1. `POST /api/process-ai` を呼ぶ
+2. サーバー側 `OPENAI_API_KEY` で要約・タグ・カテゴリ・key_points を JSON 生成
 3. `text-embedding-3-small` でベクトル生成
 4. Supabase に summary・embedding・clip_tags を書き込み
 
 API ルート（サーバーサイド）:
-- `POST /api/extract` — URL から HTML 取得 → Readability + Cheerio でテキスト抽出（SSRF 対策: DNS 解決でプライベート IP ブロック）
+- `POST /api/extract` — URL から HTML 取得 → 軽量メタ/本文抽出（SSRF 対策: DNS 解決とリダイレクト先検証）
 - `POST /api/youtube` — YouTube 字幕取得（`youtube-transcript`）
 - `POST /api/pdf` — PDF テキスト抽出（`pdf-parse`）
+- `POST /api/ocr-image` — 画像OCR
+- `POST /api/generate-report` — レポート生成
 
 ### 状態管理
 

@@ -43,7 +43,7 @@ export default function NotificationsPage() {
     let profileMap: Record<string, { display_name: string | null; avatar_emoji: string | null }> = {};
     if (actorIds.length > 0) {
       const supabase = createClient();
-      const { data } = await supabase.from('profiles').select('id, display_name, avatar_emoji').in('id', actorIds);
+      const { data } = await supabase.from('users').select('id, display_name, avatar_emoji').in('id', actorIds);
       (data ?? []).forEach(p => { profileMap[p.id] = p; });
     }
 
@@ -60,7 +60,6 @@ export default function NotificationsPage() {
     }
   }, []);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   return (

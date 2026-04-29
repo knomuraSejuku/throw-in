@@ -74,6 +74,8 @@ supabase/       # SQLマイグレーション
 | /api/comments | GET/POST | コメント取得・投稿・いいね・削除 |
 | /api/notifications | GET/POST | 通知取得・既読化 |
 | /api/generate-insight | GET/POST | AIインサイト生成・取得 |
+| /api/generate-report | POST | AIレポート生成 |
+| /api/ocr-image | POST | 画像OCR |
 | /api/delete-account | POST | アカウント削除 (サービスロール使用) |
 
 ## 認証
@@ -92,7 +94,7 @@ supabase/       # SQLマイグレーション
   → Supabase に保存
 ```
 
-- OpenAI キーはユーザーが設定画面で入力 → `localStorage` に保存
+- OpenAI キーはサーバー側 `OPENAI_API_KEY` のみを使用し、ブラウザ・`localStorage` には保存しない
 - セマンティック検索: Supabase RPC `match_clips` (コサイン類似度 ≥ 0.5、上位20件)
 
 ## 状態管理
