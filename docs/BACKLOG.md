@@ -201,10 +201,23 @@
     - `https://throw-in.vercel.app/api/health/ai`
     - 結果: `{"openaiConfigured":true}`
     - Vercel Productionは `OPENAI_API_KEY` を認識している
+  - **追加ユーザー報告:**
+    - 詳細画面に「AI処理に失敗しました。再処理をお試しください。」と表示
+    - AI整理だけでなく、タイトルも原文も取得されていない
+  - **追加切り分け:**
+    - URL保存時、`/api/extract` 失敗を `console.warn` だけで握りつぶし、`無題の記事` として保存する実装だった
+    - その結果 `extracted_content` が空になり、AI処理に渡す `contentForAi` も空/短文になりやすい
+    - AI再処理ボタンも `clip.body || clip.userNote || ''` を渡すため、本文が無いクリップでは空文字で失敗する
+  - **追加修正:**
+    1. URL抽出失敗時は保存前に止め、ユーザーに抽出失敗を表示する
+    2. URLからタイトル/本文のどちらも取得できない場合も保存前に止める
+    3. `processClipAI` は空contentならAPIを叩かずfailedにする
+    4. `processClipAI` 失敗時にレスポンス本文の先頭をログへ出し、原因を追いやすくする
   - **次にやること:**
     1. 本番でクリップを追加または詳細画面からAI再処理
     2. Vercel Function Logsで `OpenAI metadata request failed` / `Failed to persist AI metadata` 等を確認
     3. ログ内容に応じてOpenAIモデル/API形式、Supabaseスキーマ、RLSのどれが原因か切り分ける
+    4. 既に「無題の記事」として保存された本文なしクリップは、URL抽出が再実行されないため、削除して再保存するか、URL再抽出機能を別途実装する
   - **受け入れ条件:**
     - 本番で `GET /api/health/ai` が `openaiConfigured: true` を返す（達成済み）
     - 新規クリップ保存後にsummary/tags/category/key_pointsが保存される

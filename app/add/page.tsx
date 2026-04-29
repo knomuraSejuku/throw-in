@@ -256,11 +256,19 @@ function AddClipForm() {
             if (extRes.ok) {
               extractedData = await extRes.json();
             } else {
-               console.warn("Extraction failed", await extRes.text());
+               const message = await extRes.text();
+               console.warn("Extraction failed", message);
+               throw new Error(`URLの本文抽出に失敗しました。URLを確認するか、メモとして保存してください。(${extRes.status})`);
             }
           }
         } catch(e) {
           console.warn("Extraction failed", e);
+          if (e instanceof Error) throw e;
+          throw new Error("URLの本文抽出に失敗しました。URLを確認するか、メモとして保存してください。");
+        }
+
+        if (!extractedData?.title && !extractedData?.body) {
+          throw new Error("URLからタイトルや本文を取得できませんでした。別のURLを試すか、メモとして保存してください。");
         }
       }
 

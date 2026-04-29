@@ -118,6 +118,12 @@ export const useClipStore = create<ClipStore>()(
       },
 
   processClipAI: async (clipId: string, content: string) => {
+    if (!content?.trim()) {
+      console.warn('Skipping AI processing because clip content is empty', { clipId });
+      getStore().updateProcessingJob(clipId, 'failed');
+      return;
+    }
+
     getStore().updateProcessingJob(clipId, 'enriching');
 
     try {
@@ -137,7 +143,10 @@ export const useClipStore = create<ClipStore>()(
         }),
       });
 
-      if (!res.ok) throw new Error('AI processing failed: ' + res.status);
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(`AI processing failed: ${res.status} ${detail.slice(0, 300)}`);
+      }
 
       const { summary, tags, category, subcategory, keyPoints } = await res.json();
 
