@@ -23,11 +23,6 @@ async function getOpenAIError(response: Response) {
   };
 }
 
-export async function GET() {
-  const openAiKey = process.env.OPENAI_API_KEY;
-  return NextResponse.json({ openaiConfigured: Boolean(openAiKey) });
-}
-
 export async function POST(req: NextRequest) {
   const openAiKey = process.env.OPENAI_API_KEY;
   if (!openAiKey) return NextResponse.json({ error: 'AI processing unavailable' }, { status: 503 });

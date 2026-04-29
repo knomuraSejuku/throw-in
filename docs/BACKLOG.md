@@ -187,10 +187,11 @@
     4. AIメタデータ生成は成功しているが、Supabase更新/タグinsertで失敗している
     5. クリップ本文抽出に失敗し、`contentForAi` が短すぎてAI処理が開始されていない
   - **実施済み修正:**
-    1. `GET /api/process-ai` を追加
+    1. `GET /api/health/ai` を追加
        - 返却: `{ openaiConfigured: boolean }`
        - キー値は返さない
        - 本番環境でVercelが `OPENAI_API_KEY` を読めているか確認するための診断用
+       - `/api/process-ai` は認証必須のまま維持
     2. `POST /api/process-ai` のOpenAIエラーをVercelログへ安全に出すようにした
        - OpenAI status / statusText / body先頭のみ
        - Authorizationヘッダやキー値は出さない
@@ -198,7 +199,7 @@
     4. Supabaseの `clips` update / `clip_tags` insert失敗をログ・レスポンスに出すようにした
   - **次にやること:**
     1. 修正をGitHubへpushし、Vercel Productionを再デプロイ
-    2. 本番で `https://throw-in.vercel.app/api/process-ai` を開き、`openaiConfigured: true` か確認
+    2. 本番で `https://throw-in.vercel.app/api/health/ai` を開き、`openaiConfigured: true` か確認
     3. `false` の場合:
        - Vercel Project Settings > Environment Variablesで `OPENAI_API_KEY` がProductionにあるか確認
        - 追加/変更後にProductionをRedeploy
@@ -206,10 +207,10 @@
        - クリップを追加または詳細画面からAI再処理
        - Vercel Function Logsで `OpenAI metadata request failed` / `Failed to persist AI metadata` 等を確認
   - **受け入れ条件:**
-    - 本番で `GET /api/process-ai` が `openaiConfigured: true` を返す
+    - 本番で `GET /api/health/ai` が `openaiConfigured: true` を返す
     - 新規クリップ保存後にsummary/tags/category/key_pointsが保存される
     - 失敗時にVercel Logsで原因を追える
-  - ファイル: `app/api/process-ai/route.ts`, `lib/store.ts`, `app/add/page.tsx`, Vercel Environment Variables
+  - ファイル: `app/api/process-ai/route.ts`, `app/api/health/ai/route.ts`, `lib/openai-config.ts`, `middleware.ts`, `lib/store.ts`, `app/add/page.tsx`, Vercel Environment Variables
 
 - [ ] **J12** Secrets管理安全化 — `.env.local` に実APIキーを置かない運用へ移行
   - **背景:** AIコーディングエージェントが同じワークスペースを読める環境では、`.env.local` に実APIキーを書く運用自体がリスクになる

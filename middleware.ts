@@ -47,6 +47,7 @@ export async function middleware(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/view') &&
     !request.nextUrl.pathname.startsWith('/api/search') &&
     !request.nextUrl.pathname.startsWith('/api/public-clip') &&
+    !request.nextUrl.pathname.startsWith('/api/health') &&
     !request.nextUrl.pathname.startsWith('/user') &&
     !request.nextUrl.pathname.startsWith('/api/follow') &&
     !request.nextUrl.pathname.startsWith('/privacy') &&
