@@ -197,17 +197,16 @@
        - Authorizationヘッダやキー値は出さない
     3. AIレスポンスがJSONとしてparseできない場合、502で明示的に返すようにした
     4. Supabaseの `clips` update / `clip_tags` insert失敗をログ・レスポンスに出すようにした
+  - **本番確認:**
+    - `https://throw-in.vercel.app/api/health/ai`
+    - 結果: `{"openaiConfigured":true}`
+    - Vercel Productionは `OPENAI_API_KEY` を認識している
   - **次にやること:**
-    1. 修正をGitHubへpushし、Vercel Productionを再デプロイ
-    2. 本番で `https://throw-in.vercel.app/api/health/ai` を開き、`openaiConfigured: true` か確認
-    3. `false` の場合:
-       - Vercel Project Settings > Environment Variablesで `OPENAI_API_KEY` がProductionにあるか確認
-       - 追加/変更後にProductionをRedeploy
-    4. `true` の場合:
-       - クリップを追加または詳細画面からAI再処理
-       - Vercel Function Logsで `OpenAI metadata request failed` / `Failed to persist AI metadata` 等を確認
+    1. 本番でクリップを追加または詳細画面からAI再処理
+    2. Vercel Function Logsで `OpenAI metadata request failed` / `Failed to persist AI metadata` 等を確認
+    3. ログ内容に応じてOpenAIモデル/API形式、Supabaseスキーマ、RLSのどれが原因か切り分ける
   - **受け入れ条件:**
-    - 本番で `GET /api/health/ai` が `openaiConfigured: true` を返す
+    - 本番で `GET /api/health/ai` が `openaiConfigured: true` を返す（達成済み）
     - 新規クリップ保存後にsummary/tags/category/key_pointsが保存される
     - 失敗時にVercel Logsで原因を追える
   - ファイル: `app/api/process-ai/route.ts`, `app/api/health/ai/route.ts`, `lib/openai-config.ts`, `middleware.ts`, `lib/store.ts`, `app/add/page.tsx`, Vercel Environment Variables
