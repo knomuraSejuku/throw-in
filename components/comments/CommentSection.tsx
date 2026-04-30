@@ -35,12 +35,16 @@ export function CommentSection({ clipId, enabled = true, className }: {
     if (!enabled) return;
 
     fetch(`/api/comments?clipId=${clipId}`)
-      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(async r => {
+        const data = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(data?.error || 'コメントの取得に失敗しました。');
+        return data;
+      })
       .then(data => {
         setComments(data.comments ?? []);
         setCommentError(null);
       })
-      .catch(() => setCommentError('コメントの取得に失敗しました。'));
+      .catch(error => setCommentError(error instanceof Error ? error.message : 'コメントの取得に失敗しました。'));
   }, [clipId, enabled]);
 
   useEffect(() => {

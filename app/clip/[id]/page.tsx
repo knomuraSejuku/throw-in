@@ -668,7 +668,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
                 )} />
               </span>
               <Globe className="w-3.5 h-3.5" />
-              グローバル検索に公開
+              グローバルクリップに公開
             </button>
             <button
               onClick={() => processClipAI(clip.id, clip.body || clip.userNote || '')}
@@ -685,7 +685,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
 
           {!clip.isGlobalSearch && (
             <p className="mt-6 text-xs text-on-surface-variant">
-              グローバル検索に公開するとコメントを受け付けられます。
+              グローバルクリップに公開するとコメントを受け付けられます。
             </p>
           )}
         </div>

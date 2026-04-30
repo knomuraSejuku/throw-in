@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/client';
 
 const PAGE_TITLES: Record<string, string> = {
   '/': 'Library',
-  '/search': 'Search',
+  '/search': 'グローバルクリップ',
   '/history': '閲覧履歴',
   '/settings': '設定',
   '/collections': 'コレクション',

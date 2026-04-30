@@ -142,6 +142,31 @@ function htmlToText(html: string): string {
   return normalizeArticleText(decodeHtmlEntities(withBlockBreaks.replace(/<[^>]+>/g, ' ')));
 }
 
+function compactTitle(text: string, maxLength = 80): string {
+  const normalized = normalizeText(text)
+    .replace(/^["'「『]|["'」』]$/g, '')
+    .replace(/\s*[—-]\s*X\s*$/i, '')
+    .trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1).trim()}…`;
+}
+
+function getReadableXTitle(rawTitle: string, description: string, embedHtml: string, url: URL): string {
+  const generic = isXArticleUrl(url) ? 'X Article' : 'X Post';
+  const candidates = [
+    rawTitle
+      .replace(/^(.+?)\s+(?:on|さんは)\s+X:\s*/i, '')
+      .replace(/^X\s+Post\s*:?\s*/i, '')
+      .replace(/^X\s+Article\s*:?\s*/i, ''),
+    description,
+    htmlToText(embedHtml).split('\n')[0] || '',
+  ]
+    .map(value => compactTitle(value))
+    .filter(value => value && !/^x\s+(post|article)$/i.test(value));
+
+  return candidates[0] || generic;
+}
+
 function extractMainText(html: string): string {
   const articleMatch = /<article\b[^>]*>([\s\S]*?)<\/article>/i.exec(html);
   if (articleMatch?.[1]) {
@@ -191,8 +216,9 @@ async function extractXContent(url: URL) {
   }
 
   const embedHtml = oembed.status === 'fulfilled' ? oembed.value?.html || '' : '';
-  const title = getMetaContent(html, 'og:title') || getMetaContent(html, 'twitter:title') || (isXArticleUrl(url) ? 'X Article' : 'X Post');
   const description = getMetaContent(html, 'og:description') || getMetaContent(html, 'twitter:description') || htmlToText(embedHtml);
+  const rawTitle = getMetaContent(html, 'og:title') || getMetaContent(html, 'twitter:title') || '';
+  const title = getReadableXTitle(rawTitle, description, embedHtml, url);
   const thumbnail = getMetaContent(html, 'og:image') || getMetaContent(html, 'twitter:image') || null;
   const outLinks = [...getLinksFromHtml(embedHtml), ...getLinksFromHtml(html)];
   const uniqueOutLinks = Array.from(new Set(outLinks)).slice(0, 10);

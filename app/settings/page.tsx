@@ -193,7 +193,12 @@ export default function SettingsPage() {
       if (error) throw error;
     } catch (error) {
       setIsLinkingGoogle(false);
-      setAuthError(error instanceof Error ? error.message : 'Googleログインの連携に失敗しました。');
+      const message = error instanceof Error ? error.message : '';
+      if (message.toLowerCase().includes('manual linking is disabled')) {
+        setAuthError('Supabase AuthのManual linkingが無効です。Auth > Providers/SettingsでManual linkingを有効にしてから再試行してください。');
+      } else {
+        setAuthError(message || 'Googleログインの連携に失敗しました。');
+      }
     }
   };
 
@@ -379,11 +384,11 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Public Profile (for global search) */}
+            {/* Public Profile */}
             <div className="border-t border-outline-variant/20 pt-5 space-y-4">
               <div>
-                <p className="text-sm font-semibold text-on-surface mb-0.5">グローバル検索プロフィール</p>
-                <p className="text-xs text-on-surface-variant">実名は使用しないでください。グローバル検索で他のユーザーに表示されます。</p>
+                <p className="text-sm font-semibold text-on-surface mb-0.5">グローバルクリッププロフィール</p>
+                <p className="text-xs text-on-surface-variant">実名は使用しないでください。グローバルクリップで他のユーザーに表示されます。</p>
               </div>
 
               {/* Emoji avatar picker */}

@@ -52,6 +52,21 @@ type UserProfile = {
 
 type NotificationType = 'comment_on_clip' | 'comment_reply' | 'like';
 
+function isMissingCommentsSchema(error: { message?: string; code?: string } | null | undefined) {
+  const message = error?.message?.toLowerCase() ?? '';
+  return error?.code === 'PGRST205'
+    || message.includes('clip_comments')
+    || message.includes('comment_likes')
+    || message.includes('schema cache');
+}
+
+function commentsSchemaError() {
+  return NextResponse.json({
+    error: 'コメントDBが未設定です。Supabase SQL Editorで supabase/13_comments.sql を適用してください。',
+    code: 'COMMENTS_SCHEMA_MISSING',
+  }, { status: 503 });
+}
+
 async function shouldCreateNotification(userId: string, type: NotificationType) {
   const { data } = await anonClient
     .from('users')
@@ -102,6 +117,7 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
   if (clipError) {
     console.error('[comments:get_clip_failed]', { clipId, error: clipError.message, code: clipError.code });
+    if (isMissingCommentsSchema(clipError)) return commentsSchemaError();
     return NextResponse.json({ error: 'Failed to load comments' }, { status: 500 });
   }
   if (!clip) return NextResponse.json({ error: 'Clip not found or not public' }, { status: 404 });
@@ -115,6 +131,7 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error('[comments:get_comments_failed]', { clipId, error: error.message, code: error.code });
+    if (isMissingCommentsSchema(error)) return commentsSchemaError();
     return NextResponse.json({ error: 'Failed to load comments' }, { status: 500 });
   }
 
@@ -205,7 +222,10 @@ export async function POST(req: NextRequest) {
         .eq('id', parentId)
         .maybeSingle();
 
-      if (parentError) return NextResponse.json({ error: parentError.message }, { status: 500 });
+      if (parentError) {
+        if (isMissingCommentsSchema(parentError)) return commentsSchemaError();
+        return NextResponse.json({ error: parentError.message }, { status: 500 });
+      }
       if (!parentComment || parentComment.clip_id !== clipId) {
         return NextResponse.json({ error: 'Parent comment not found for this clip' }, { status: 400 });
       }
@@ -221,7 +241,10 @@ export async function POST(req: NextRequest) {
       .select('id, content, parent_id, created_at, user_id')
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      if (isMissingCommentsSchema(error)) return commentsSchemaError();
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     const { data: profile } = await anonClient
       .from('users')
@@ -263,22 +286,33 @@ export async function POST(req: NextRequest) {
       .eq('id', commentId)
       .maybeSingle();
 
-    if (commentError) return NextResponse.json({ error: commentError.message }, { status: 500 });
+    if (commentError) {
+      if (isMissingCommentsSchema(commentError)) return commentsSchemaError();
+      return NextResponse.json({ error: commentError.message }, { status: 500 });
+    }
     if (!targetComment) return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
 
-    const { data: existing } = await supabase
+    const { data: existing, error: existingLikeError } = await supabase
       .from('comment_likes')
       .select('user_id')
       .eq('user_id', user.id)
       .eq('comment_id', commentId)
       .maybeSingle();
 
+    if (existingLikeError) {
+      if (isMissingCommentsSchema(existingLikeError)) return commentsSchemaError();
+      return NextResponse.json({ error: existingLikeError.message }, { status: 500 });
+    }
+
     if (existing) {
       await supabase.from('comment_likes').delete().eq('user_id', user.id).eq('comment_id', commentId);
       return NextResponse.json({ liked: false });
     } else {
       const { error } = await supabase.from('comment_likes').insert({ user_id: user.id, comment_id: commentId });
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (error) {
+        if (isMissingCommentsSchema(error)) return commentsSchemaError();
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
 
       if (targetComment.user_id !== user.id) {
         await createNotification({
@@ -301,7 +335,10 @@ export async function POST(req: NextRequest) {
       .eq('id', commentId)
       .eq('user_id', user.id);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      if (isMissingCommentsSchema(error)) return commentsSchemaError();
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     return NextResponse.json({ ok: true });
   }
 

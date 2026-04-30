@@ -54,7 +54,7 @@ function SidebarContent() {
     { label: 'ブックマーク', href: '/?filter=bookmarked', icon: Bookmark, isActive: currentFilter === 'bookmarked' },
     { label: '履歴', href: '/history', icon: History, isActive: pathname === '/history' },
     { label: 'フォロー中', href: '/following', icon: Users, isActive: pathname === '/following' },
-    { label: 'グローバル検索', href: '/search', icon: Search, isActive: pathname === '/search' },
+    { label: 'グローバルクリップ', href: '/search', icon: Search, isActive: pathname === '/search' },
   ];
 
   const footerNav = [

@@ -55,6 +55,20 @@ const chunkArray = <T,>(items: T[], size: number): T[][] => {
 };
 
 const CSV_IMPORT_DRAFT_KEY = 'throwin:csv-import-draft';
+const GENERIC_CLIP_TITLES = new Set(['x post', 'x article', 'twitter post', '無題の記事']);
+
+function deriveReadableTitle(rawTitle: string | undefined | null, extractedBody: string | undefined | null, fallback: string) {
+  const candidate = (rawTitle ?? '').trim();
+  if (candidate && !GENERIC_CLIP_TITLES.has(candidate.toLowerCase())) return candidate;
+
+  const firstLine = (extractedBody ?? '')
+    .split('\n')
+    .map(line => line.trim())
+    .find(line => line && !line.startsWith('投稿内リンク:') && !/^https?:\/\//.test(line));
+
+  if (!firstLine) return fallback;
+  return firstLine.length > 80 ? `${firstLine.slice(0, 79).trim()}…` : firstLine;
+}
 
 type CsvBatchResult = {
   url: string;
@@ -432,8 +446,7 @@ function AddClipForm() {
       }
 
       const finalTitle = title || (
-        (mode === 'url' && extractedData?.title) ? extractedData.title :
-        mode === 'url' ? '無題の記事' :
+        mode === 'url' ? deriveReadableTitle(extractedData?.title, extractedData?.body || extractedData?.description, '無題の記事') :
         mode === 'diary' ? `日記 (${new Date().toLocaleDateString('ja-JP')})` :
         file?.name || '新しいファイル'
       );
@@ -806,7 +819,7 @@ function AddClipForm() {
                 </button>
                 <span className="text-xs text-on-surface-variant flex items-center gap-1.5">
                   <Globe className="w-3.5 h-3.5" />
-                  グローバル検索に公開
+                  グローバルクリップに公開
                 </span>
               </div>
             )}
