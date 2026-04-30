@@ -127,6 +127,18 @@
 
 /* ── Prose / Article Body ─────────────────────────────────────────── */
 @layer components {
+  :is(
+    a[href$="/notifications"],
+    a[href$="/insights"],
+    a[href$="/changelog"],
+    a[href$="/settings"]
+  )[class~="rounded-2xl"][class~="py-3"] {
+    width: 16rem !important;
+    max-width: 16rem !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+  }
+
   .prose-body {
     color: var(--color-on-surface-variant);
     line-height: 1.9;

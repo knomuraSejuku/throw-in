@@ -900,6 +900,10 @@
     - **原因再判定:** `SidebarNav` のコレクション見出しで `<button>` の中に `<button>` をネストしており、HTML仕様上不正な構造だった。ブラウザのDOM補正により、サイドバー内のhover/click領域が意図せずメインカラムへ漏れる可能性が高い
     - **対応:** コレクション見出しを「開閉ボタン」と「追加ボタン」の兄弟要素へ分離し、ネストしたbuttonを解消
     - **対応:** CSSでの押さえ込みではなく、DOM構造の正常化でhover領域がサイドバー内に収まるよう修正
+  - **追加修正（2026-04-30 / DevTools確認後）:**
+    - **DevTools確認:** 旧DOMの `a[href="/notifications"]` / `a[href="/insights"]` / `a[href="/changelog"]` / `a[href="/settings"]` が残存し、各リンクが `1167px × 44px` まで横伸びしてメインカラムを覆っていた
+    - **対応:** 旧DOMが残っても壊れないよう、href末尾が該当4パスで、かつ `rounded-2xl` / `py-3` を持つサイドバーfooterリンクだけをCSSで `width/max-width: 16rem` に強制制限
+    - **意図:** 現行JSのbutton化が反映される前、またはブラウザ/Service Worker/キャッシュで旧AppShellが残るケースでも、4項目のhover/click領域がサイドバー外へ伸びないようにする
   - ファイル: `components/shell/SidebarNav.tsx`, `components/shell/AppShell.tsx`, `components/shell/BottomNavBar.tsx`, `components/shell/TopNavBar.tsx`
 
 - [x] **K13** グローバルクリップにコメントが反映されない問題の修正
