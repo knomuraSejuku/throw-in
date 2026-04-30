@@ -44,7 +44,7 @@ export default function BookmarksPage() {
                 "group rounded-[32px] p-6 transition-all duration-300 flex flex-col h-full cursor-pointer",
                 clip.isUnread
                   ? "bg-surface-container-lowest shadow-ambient hover:shadow-card-hover hover:-translate-y-1"
-                  : "bg-surface-container-low opacity-90 hover:opacity-100"
+                  : "bg-surface-container-low shadow-ambient opacity-90 hover:opacity-100 hover:shadow-card-hover hover:-translate-y-1"
               )}>
                 <div className="flex justify-between items-start mb-4">
                   <span className={clsx(

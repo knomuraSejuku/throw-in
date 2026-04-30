@@ -507,7 +507,9 @@ function LibraryContent() {
               {paginatedClips.map(clip => (
                 <Link href={`/clip/${clip.id}`} key={clip.id} className={clsx(
                   "flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 border border-outline-variant/10",
-                  clip.isUnread ? "bg-surface-container-lowest shadow-ambient hover:shadow-card-hover hover:-translate-y-0.5" : "bg-surface-container-low hover:bg-surface-container-high"
+                  clip.isUnread
+                    ? "bg-surface-container-lowest shadow-ambient hover:shadow-card-hover hover:-translate-y-0.5"
+                    : "bg-surface-container-low shadow-ambient hover:bg-surface-container-high hover:shadow-card-hover hover:-translate-y-0.5"
                 )}>
                   <button
                     type="button"
@@ -625,7 +627,7 @@ function LibraryContent() {
                       ? "bg-[#f3f4f6] hover:shadow-ambient hover:-translate-y-1"
                       : clip.isUnread
                         ? "bg-surface-container-lowest shadow-ambient hover:shadow-card-hover hover:-translate-y-1"
-                        : "bg-surface-container-low opacity-90 hover:opacity-100"
+                        : "bg-surface-container-low shadow-ambient opacity-90 hover:opacity-100 hover:shadow-card-hover hover:-translate-y-1"
                   )}>
                     <button
                       type="button"
