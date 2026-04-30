@@ -45,6 +45,19 @@ const blankPlan: Omit<Plan, 'id'> = {
   sort_order: 100,
 };
 
+const textPlanFields = [
+  { key: 'code', label: 'プランコード', help: 'APIや内部処理で使う一意な英数字。例: plus' },
+  { key: 'name', label: '表示名', help: 'ユーザーと管理画面に表示する名称。例: Plus' },
+  { key: 'description', label: '説明文', help: '設定画面のプランカードに表示する短い説明。' },
+] as const;
+
+const numberPlanFields = [
+  { key: 'monthly_price_yen', label: '月額料金', unit: '円/月', help: '月額課金時の税込想定金額。' },
+  { key: 'yearly_price_yen', label: '年額料金', unit: '円/年', help: '年額課金時の金額。2ヶ月無料なら月額×10が目安。' },
+  { key: 'weekly_ai_limit', label: '週間AI処理上限', unit: '回/週', help: 'ユーザーが1週間に実行できるAI整理・更新確認の回数。' },
+  { key: 'sort_order', label: '表示順', unit: '', help: '小さい数字ほど先に表示。Free=10, Plus=20 など。' },
+] as const;
+
 export default function AdminPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -199,28 +212,45 @@ export default function AdminPage() {
                 ))}
               </div>
 
-              <div className="rounded-3xl bg-surface-container-low p-4 space-y-3">
-                <p className="text-sm font-bold text-on-surface">{editingPlan ? `${editingPlan.name}を編集` : '新規プラン作成'}</p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {[
-                    ['code', 'コード'],
-                    ['name', '名称'],
-                    ['description', '説明'],
-                  ].map(([key, label]) => (
-                    <input key={key} value={String((draft as any)[key] ?? '')} onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))} placeholder={label} className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2 text-sm outline-none focus:border-primary" />
+              <div className="rounded-3xl bg-surface-container-low p-5 md:p-6 space-y-5">
+                <div>
+                  <p className="text-base font-bold text-on-surface">{editingPlan ? `${editingPlan.name}を編集` : '新規プラン作成'}</p>
+                  <p className="text-xs text-on-surface-variant mt-1">
+                    年額料金は「2ヶ月分無料」にする場合、月額料金の10ヶ月分を入力してください。
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {textPlanFields.map(({ key, label, help }) => (
+                    <label key={key} className={key === 'description' ? 'md:col-span-2 space-y-1.5' : 'space-y-1.5'}>
+                      <span className="block text-xs font-bold text-on-surface">{label}</span>
+                      <input
+                        value={String((draft as any)[key] ?? '')}
+                        onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
+                        placeholder={label}
+                        className="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-sm text-on-surface outline-none placeholder:text-outline focus:border-primary"
+                      />
+                      <span className="block text-[11px] leading-relaxed text-on-surface-variant">{help}</span>
+                    </label>
                   ))}
-                  {[
-                    ['monthly_price_yen', '月額料金'],
-                    ['yearly_price_yen', '年額料金'],
-                    ['weekly_ai_limit', '週間AI上限'],
-                    ['sort_order', '表示順'],
-                  ].map(([key, label]) => (
-                    <input key={key} type="number" value={Number((draft as any)[key] ?? 0)} onChange={e => setDraft(d => ({ ...d, [key]: Number(e.target.value) }))} placeholder={label} className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2 text-sm outline-none focus:border-primary" />
+                  {numberPlanFields.map(({ key, label, unit, help }) => (
+                    <label key={key} className="space-y-1.5">
+                      <span className="block text-xs font-bold text-on-surface">{label}</span>
+                      <div className="flex overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-lowest focus-within:border-primary">
+                        <input
+                          type="number"
+                          value={Number((draft as any)[key] ?? 0)}
+                          onChange={e => setDraft(d => ({ ...d, [key]: Number(e.target.value) }))}
+                          className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-on-surface outline-none"
+                        />
+                        {unit && <span className="flex items-center border-l border-outline-variant/20 px-3 text-xs font-semibold text-on-surface-variant">{unit}</span>}
+                      </div>
+                      <span className="block text-[11px] leading-relaxed text-on-surface-variant">{help}</span>
+                    </label>
                   ))}
                 </div>
-                <label className="flex items-center gap-2 text-sm text-on-surface">
+                <label className="flex items-center gap-2 text-sm font-semibold text-on-surface">
                   <input type="checkbox" checked={Boolean((draft as any).is_active)} onChange={e => setDraft(d => ({ ...d, is_active: e.target.checked }))} />
-                  有効
+                  このプランを有効にする
                 </label>
                 <button onClick={savePlan} disabled={isSaving} className="brand-button-primary">
                   {isSaving ? '保存中...' : '保存'}
