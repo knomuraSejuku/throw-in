@@ -206,12 +206,12 @@ export const useClipStore = create<ClipStore>()(
         throw new Error(`AI processing failed: ${res.status} ${detail.slice(0, 300)}`);
       }
 
-      const { summary, tags, category, subcategory, keyPoints } = await res.json();
+      const { title, summary, tags, category, subcategory, keyPoints } = await res.json();
 
       getStore().updateProcessingJob(clipId, 'done');
       aiJustCompleted.add(clipId);
 
-      await getStore().updateClip(clipId, { summary, tags, category, subcategory, keyPoints });
+      await getStore().updateClip(clipId, { title: title || undefined, summary, tags, category, subcategory, keyPoints });
     } catch (err) {
       console.error('Job error', err);
       getStore().updateProcessingJob(clipId, 'failed');

@@ -15,6 +15,40 @@ const CATEGORY_TAXONOMY: Record<string, string[]> = {
 };
 
 const MAX_AI_TAGS = 20;
+const GENERIC_CLIP_TITLES = new Set([
+  'x post',
+  'x article',
+  'twitter post',
+  'twitter article',
+  '無題の記事',
+  'new file',
+  '新しいファイル',
+  '共有ファイル',
+]);
+
+function normalizeTitle(title: unknown): string | null {
+  const value = String(title ?? '').trim().replace(/\s+/g, ' ');
+  if (!value || value.length > 120) return null;
+  return value;
+}
+
+function isGenericTitle(title: string): boolean {
+  const normalized = title.trim().toLowerCase();
+  if (!normalized) return true;
+  if (GENERIC_CLIP_TITLES.has(normalized)) return true;
+  if (/^x\s+(post|article)(\s*[:\-–—]\s*)?$/i.test(title)) return true;
+  if (/^twitter\s+(post|article)(\s*[:\-–—]\s*)?$/i.test(title)) return true;
+  if (/^image\.(jpe?g|png|webp|gif|heic)$/i.test(title)) return true;
+  if (/^document\.pdf$/i.test(title)) return true;
+  return false;
+}
+
+function isUploadedFileClip(clip: { content_type?: string | null; source_domain?: string | null; url?: string | null }) {
+  if (clip.content_type === 'image' || clip.content_type === 'document') return true;
+  if (clip.content_type === 'video' && clip.url?.includes('/storage/v1/object/public/clip-attachments/')) return true;
+  const source = clip.source_domain ?? '';
+  return /\.(jpe?g|png|webp|gif|heic|pdf|mp4)$/i.test(source);
+}
 
 async function getOpenAIError(response: Response) {
   const text = await response.text().catch(() => '');
@@ -69,9 +103,15 @@ export async function POST(req: NextRequest) {
 
   if (!clipId || !content) return NextResponse.json({ error: 'Missing clipId or content' }, { status: 400 });
 
-  // Verify ownership
-  const { data: clip } = await supabase.from('clips').select('user_id').eq('id', clipId).single();
+  // Verify ownership and load current title/type for title improvement rules.
+  const { data: clip } = await supabase
+    .from('clips')
+    .select('user_id, title, content_type, source_domain, url')
+    .eq('id', clipId)
+    .single();
   if (!clip || clip.user_id !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const currentTitle = String(clip.title || clipTitle || '').trim();
+  const shouldImproveTitle = isUploadedFileClip(clip) || isGenericTitle(currentTitle);
 
   const systemPrompt = `あなたはプロの編集者です。ユーザーが保存するコンテンツのメタデータを抽出します。提供されたテキストを読み、以下のJSONフォーマットで要約・タグ・カテゴリを返してください。
 
@@ -89,8 +129,14 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
 - 新しい概念には新規タグを追加してよい
 - タグは短く具体的に（1〜4語程度）
 
+タイトル生成ルール:
+- generated_titleには、一覧で一目で内容が分かる短いタイトルを必ず返す
+- ファイル名、"X Post"、"X Article"、"Twitter Post"、"無題の記事" のような汎用名をそのまま使わない
+- 20〜45文字程度を目安に、主題・固有名詞・資料種別が分かる自然なタイトルにする
+- クリックを煽る表現や説明文ではなく、保存物の名前として使える表現にする
+
 出力フォーマット:
-{"summary": "3〜4文程度の要約（コンテンツの言語に合わせる）", "tags": ["タグ1", "タグ2", ...], "category": "カテゴリ名", "subcategory": "サブカテゴリ名", "key_points": "## ポイント1\\n\\n- 説明（Markdown形式。h2/h3と箇条書きで階層を表現。コンテンツの言語に合わせる）"}`;
+{"generated_title": "内容が一目で分かる短いタイトル", "summary": "3〜4文程度の要約（コンテンツの言語に合わせる）", "tags": ["タグ1", "タグ2", ...], "category": "カテゴリ名", "subcategory": "サブカテゴリ名", "key_points": "## ポイント1\\n\\n- 説明（Markdown形式。h2/h3と箇条書きで階層を表現。コンテンツの言語に合わせる）"}`;
 
   // AI summary/tags/category
   let aiSummary: string | null = null;
@@ -98,6 +144,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
   let aiCategory: string | null = null;
   let aiSubcategory: string | null = null;
   let aiKeyPoints: string | null = null;
+  let aiGeneratedTitle: string | null = null;
 
   const MAX_RETRIES = 2;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -109,7 +156,16 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
         text: { format: { type: 'json_object' } },
         input: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: content.substring(0, 20000) },
+          {
+            role: 'user',
+            content: [
+              `現在のタイトル: ${currentTitle || '（なし）'}`,
+              `コンテンツ種別: ${clip.content_type || 'unknown'}`,
+              `保存元/ファイル名: ${clip.source_domain || '（なし）'}`,
+              '',
+              content.substring(0, 20000),
+            ].join('\n'),
+          },
         ],
       }),
     });
@@ -120,13 +176,14 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
         ?.content?.find((c: { type: string }) => c.type === 'output_text')?.text ?? '';
       try {
         const parsed = JSON.parse(outputText);
+        aiGeneratedTitle = normalizeTitle(parsed.generated_title);
         aiSummary = parsed.summary || null;
         newTags = normalizeTags(parsed.tags);
         aiCategory = parsed.category || null;
         aiSubcategory = parsed.subcategory || null;
         aiKeyPoints = typeof parsed.key_points === 'string' ? parsed.key_points.trim() : null;
       } catch { /* parse error, retry */ }
-      if (aiSummary || newTags.length > 0 || aiCategory || aiKeyPoints) {
+      if (aiGeneratedTitle || aiSummary || newTags.length > 0 || aiCategory || aiKeyPoints) {
         break;
       }
 
@@ -163,9 +220,13 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
   }
 
   const mergedTags = normalizeTags(newTags.length > 0 ? newTags : existingTags);
+  const nextTitle = shouldImproveTitle && aiGeneratedTitle && aiGeneratedTitle !== currentTitle
+    ? aiGeneratedTitle
+    : null;
 
   // Persist to DB
   const dbUpdate: Record<string, unknown> = { summary: aiSummary };
+  if (nextTitle) dbUpdate.title = nextTitle;
   if (embeddingVector) dbUpdate.embedding = embeddingVector;
   if (aiCategory) dbUpdate.category = aiCategory;
   if (aiSubcategory) dbUpdate.subcategory = aiSubcategory;
@@ -185,7 +246,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
     }
   }
 
-  return NextResponse.json({ summary: aiSummary, tags: mergedTags, category: aiCategory, subcategory: aiSubcategory, keyPoints: aiKeyPoints });
+  return NextResponse.json({ title: nextTitle, summary: aiSummary, tags: mergedTags, category: aiCategory, subcategory: aiSubcategory, keyPoints: aiKeyPoints });
 }
 
 export async function PUT(req: NextRequest) {
