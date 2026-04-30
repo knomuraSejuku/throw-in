@@ -489,8 +489,8 @@ function AddClipForm() {
 
   return (
     <AppShell>
-      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-6 bg-on-surface/20 backdrop-blur-sm">
-        <div className="bg-surface-container-lowest w-full max-w-3xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row relative max-h-full">
+      <div className="fixed inset-0 z-[60] flex items-stretch justify-center overflow-y-auto bg-on-surface/20 backdrop-blur-sm px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] md:items-center md:p-6">
+        <div className="relative flex min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-surface-container-lowest shadow-2xl md:max-h-[calc(100dvh-3rem)] md:flex-row md:rounded-[32px]">
           
           <button 
             onClick={() => router.back()}
@@ -501,7 +501,7 @@ function AddClipForm() {
           </button>
 
           {/* Left Rail */}
-          <div className="w-full md:w-64 bg-surface-container-low p-6 md:p-8 flex flex-col gap-6 md:gap-8 flex-shrink-0">
+          <div className="w-full md:w-64 bg-surface-container-low p-5 md:p-8 flex flex-col gap-4 md:gap-8 flex-shrink-0">
             <div className="space-y-1">
               <h2 className="text-xl font-bold tracking-tight text-on-surface">新規追加</h2>
               <p className="text-sm text-on-surface-variant font-medium">クリップを作成</p>
@@ -563,7 +563,7 @@ function AddClipForm() {
           </div>
 
           {/* Form Area */}
-          <div className="flex-1 p-6 md:p-10 lg:p-12 space-y-8 overflow-y-auto">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-5 md:space-y-8 md:p-10 lg:p-12">
             
             {isSaved && (
               <div className="bg-success/10 text-success px-4 py-3 rounded-xl text-sm font-bold border border-success/20 flex items-center gap-2">
@@ -805,7 +805,7 @@ function AddClipForm() {
               </div>
             )}
 
-            <div className="pt-4 flex items-center justify-end gap-3">
+            <div className="sticky bottom-0 -mx-5 flex items-center justify-end gap-3 border-t border-outline-variant/10 bg-surface-container-lowest/95 px-5 py-4 backdrop-blur md:static md:mx-0 md:border-t-0 md:bg-transparent md:px-0 md:pt-4 md:pb-0 md:backdrop-blur-0">
               <button
                 onClick={() => router.back()}
                 disabled={isSaving}
