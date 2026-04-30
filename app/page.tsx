@@ -24,30 +24,56 @@ function LibraryContent() {
   const shareStatus = searchParams.get('share');
   const shareMessage = searchParams.get('message');
   const processClipId = searchParams.get('process');
+  const [pendingAiClipIds, setPendingAiClipIds] = useState<string[]>([]);
 
   useEffect(() => {
     fetchClips();
   }, [fetchClips]);
 
   useEffect(() => {
-    if (!processClipId || isLoading || processingJobs[processClipId]) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem('throw-in-pending-ai-clip-ids') || '[]');
+      setPendingAiClipIds(Array.isArray(saved) ? saved.map(String).filter(Boolean) : []);
+    } catch {
+      setPendingAiClipIds([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    const queuedClipId = processClipId || pendingAiClipIds.find(id => !processingJobs[id]);
+    if (!queuedClipId || isLoading || processingJobs[queuedClipId]) return;
 
     const processSharedClip = async () => {
-      startProcessingJob(processClipId, 'enriching');
+      startProcessingJob(queuedClipId, 'enriching');
       const res = await fetch('/api/batch-process-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clipIds: [processClipId] }),
+        body: JSON.stringify({ clipIds: [queuedClipId] }),
       });
-      updateProcessingJob(processClipId, res.ok ? 'done' : 'failed');
-      if (res.ok) await fetchClips();
+      const data = await res.json().catch(() => null);
+      const processed = res.ok && Number(data?.processed ?? 0) > 0;
+      updateProcessingJob(queuedClipId, processed ? 'done' : 'failed');
+      const next = pendingAiClipIds.filter(id => id !== queuedClipId);
+      try {
+        localStorage.setItem('throw-in-pending-ai-clip-ids', JSON.stringify(next));
+      } catch {
+        // Ignore storage failures.
+      }
+      setPendingAiClipIds(next);
+      if (processed) {
+        await fetchClips();
+      } else {
+        console.warn('[library:auto_ai_failed]', { clipId: queuedClipId, data });
+      }
     };
     processSharedClip();
 
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete('process');
-    router.replace(`/?${params.toString()}`, { scroll: false });
-  }, [fetchClips, isLoading, processClipId, processingJobs, router, searchParams, startProcessingJob, updateProcessingJob]);
+    if (processClipId) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('process');
+      router.replace(`/?${params.toString()}`, { scroll: false });
+    }
+  }, [fetchClips, isLoading, pendingAiClipIds, processClipId, processingJobs, router, searchParams, startProcessingJob, updateProcessingJob]);
 
   // Local View States
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');

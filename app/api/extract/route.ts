@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dns from 'dns/promises';
+import { Readability } from '@mozilla/readability';
+import { JSDOM } from 'jsdom';
 
 export const runtime = 'nodejs';
 
@@ -168,6 +170,15 @@ function getReadableXTitle(rawTitle: string, description: string, embedHtml: str
 }
 
 function extractMainText(html: string): string {
+  try {
+    const dom = new JSDOM(html);
+    const article = new Readability(dom.window.document).parse();
+    const text = article?.textContent ? normalizeArticleText(article.textContent) : '';
+    if (text.length > 80) return text;
+  } catch (error) {
+    console.warn('[extract:readability_failed]', error instanceof Error ? error.message : String(error));
+  }
+
   const articleMatch = /<article\b[^>]*>([\s\S]*?)<\/article>/i.exec(html);
   if (articleMatch?.[1]) {
     const text = htmlToText(articleMatch[1]);

@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { YoutubeTranscript } from 'youtube-transcript';
 
+function getYouTubeVideoId(rawUrl: string) {
+  try {
+    const parsed = new URL(rawUrl);
+    const host = parsed.hostname.replace(/^(www\.|m\.)/, '');
+    if (host === 'youtu.be') return parsed.pathname.split('/').filter(Boolean)[0] ?? rawUrl;
+    if (host === 'youtube.com' || host === 'music.youtube.com') return parsed.searchParams.get('v') || rawUrl;
+  } catch {
+    // The library also accepts bare video IDs.
+  }
+  return rawUrl;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { url } = await req.json();
@@ -10,8 +22,12 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const transcript = await YoutubeTranscript.fetchTranscript(url);
+      const videoId = getYouTubeVideoId(url);
+      const transcript = await YoutubeTranscript.fetchTranscript(videoId);
       const fullText = transcript.map(t => t.text).join(' ');
+      if (!fullText.trim()) {
+        return NextResponse.json({ error: '字幕は取得できましたが、本文が空でした。' }, { status: 400 });
+      }
 
       return NextResponse.json({
         body: fullText,

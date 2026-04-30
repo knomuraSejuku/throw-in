@@ -45,6 +45,29 @@ async function readApiError(response: Response) {
   }
 }
 
+function isYouTubeUrl(url: string) {
+  return url.includes('youtube.com') || url.includes('youtu.be');
+}
+
+async function fetchExtraction(origin: string, url: string, contentType?: string | null) {
+  const endpoints = contentType === 'video' && isYouTubeUrl(url)
+    ? ['/api/youtube', '/api/extract']
+    : ['/api/extract'];
+
+  let lastError = '';
+  for (const endpoint of endpoints) {
+    const res = await fetch(`${origin}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (res.ok) return await res.json();
+    lastError = await readApiError(res);
+  }
+
+  throw new Error(lastError || 'Extraction failed');
+}
+
 export async function POST(req: NextRequest) {
   const { supabase, user } = await getAuthedSupabase();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -64,6 +87,10 @@ export async function POST(req: NextRequest) {
       clips (
         id,
         title,
+        url,
+        content_type,
+        source_domain,
+        preview_image_url,
         extracted_content,
         my_note,
         summary,
@@ -103,7 +130,29 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const content = clip.extracted_content || clip.saved_note || clip.my_note || clip.summary || clip.title || '';
+    let content = clip.extracted_content || '';
+    if ((!content.trim() || content.trim().length <= 10) && clip.url) {
+      try {
+        const extracted = await fetchExtraction(req.nextUrl.origin, clip.url, clip.content_type);
+        const extractedBody = extracted?.body || extracted?.description || '';
+        if (String(extractedBody).trim().length > 10) {
+          content = String(extractedBody);
+          await supabase
+            .from('clips')
+            .update({
+              title: clip.title || extracted?.title || clip.url,
+              extracted_content: content,
+              source_domain: clip.source_domain || extracted?.domain || null,
+              preview_image_url: clip.preview_image_url || extracted?.thumbnail || null,
+            })
+            .eq('id', clipId);
+        }
+      } catch (error) {
+        console.warn('[batch-process-ai:extract_retry_failed]', { clipId, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+
+    content = content || clip.saved_note || clip.my_note || clip.summary || clip.title || '';
     if (!content.trim() || content.trim().length <= 10) {
       results.push({ clipId, status: 'skipped', error: 'No content for AI processing' });
       continue;

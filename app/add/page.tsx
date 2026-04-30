@@ -77,6 +77,17 @@ const csvResultLabel = (result: CsvBatchResult) => {
 
 function AddClipForm() {
   const router = useRouter();
+
+  const enqueueAiProcessing = (clipId: string) => {
+    try {
+      const key = 'throw-in-pending-ai-clip-ids';
+      const current = JSON.parse(localStorage.getItem(key) || '[]');
+      const next = Array.from(new Set([...(Array.isArray(current) ? current.map(String) : []), clipId]));
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      // Processing will still be attempted via the query parameter.
+    }
+  };
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<'url' | 'upload' | 'diary' | 'csv'>('url');
   const [isMounted, setIsMounted] = useState(false);
@@ -293,6 +304,7 @@ function AddClipForm() {
 
         await useClipStore.getState().fetchClips();
         setIsSaved(true);
+        enqueueAiProcessing(data.clipId);
         setTimeout(() => router.push(`/?process=${encodeURIComponent(data.clipId)}`), 1500);
         return;
       }
@@ -426,6 +438,7 @@ function AddClipForm() {
       setIsSaved(true);
       setTimeout(() => {
         const shouldProcess = !inheritedClip && ((extractedData?.body || note || '').trim().length > 10);
+        if (shouldProcess) enqueueAiProcessing(clipId);
         router.push(shouldProcess ? `/?process=${encodeURIComponent(clipId)}` : '/');
       }, 1500);
 
