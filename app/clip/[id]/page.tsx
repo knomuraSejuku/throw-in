@@ -631,7 +631,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
                 >
                   {/<[a-z][\s\S]*>/i.test(clip.body)
                     ? <ReactMarkdown rehypePlugins={[rehypeRaw, rehypeSanitize]}>{clip.body}</ReactMarkdown>
-                    : <div className="whitespace-pre-wrap text-base md:text-[1.0625rem] text-on-surface leading-[2]">{formatPlainArticleText(clip.body)}</div>
+                    : <div className="article-plain-text">{formatPlainArticleText(clip.body)}</div>
                   }
                 </div>
                 {!isBodyExpanded && (

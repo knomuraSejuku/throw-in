@@ -160,6 +160,14 @@
     color: var(--color-on-surface);
   }
 
+  .prose-body .article-plain-text {
+    white-space: pre-wrap;
+    color: var(--color-on-surface);
+    font-size: inherit;
+    line-height: inherit;
+    overflow-wrap: anywhere;
+  }
+
   /* Headings */
   .prose-body h1,
   .prose-body h2,
