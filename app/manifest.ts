@@ -38,13 +38,19 @@ export default function manifest(): MetadataRoute.Manifest {
       },
     ],
     share_target: {
-      action: '/add',
-      method: 'GET',
-      enctype: 'application/x-www-form-urlencoded',
+      action: '/api/share-target',
+      method: 'POST',
+      enctype: 'multipart/form-data',
       params: {
         title: 'title',
         text: 'text',
         url: 'url',
+        files: [
+          {
+            name: 'files',
+            accept: ['image/*', 'application/pdf', 'video/mp4'],
+          },
+        ],
       },
     }
   } as any; // Type override for share_target not officially in Next.js manifest types yet

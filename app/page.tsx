@@ -21,10 +21,29 @@ function LibraryContent() {
   const currentCollection = searchParams.get('collection');
   const currentCategory = searchParams.get('category');
   const currentSubcategory = searchParams.get('subcategory');
+  const shareStatus = searchParams.get('share');
+  const shareMessage = searchParams.get('message');
+  const processClipId = searchParams.get('process');
 
   useEffect(() => {
     fetchClips();
   }, [fetchClips]);
+
+  useEffect(() => {
+    if (!processClipId || isLoading || processingJobs[processClipId]) return;
+
+    const clip = clips.find(c => c.id === processClipId);
+    if (!clip) return;
+
+    const content = clip.body || clip.userNote || clip.title;
+    if (!content || content.trim().length <= 10) return;
+
+    useClipStore.getState().processClipAI(processClipId, content);
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('process');
+    router.replace(`/?${params.toString()}`, { scroll: false });
+  }, [clips, isLoading, processClipId, processingJobs, router, searchParams]);
 
   // Local View States
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -213,6 +232,23 @@ function LibraryContent() {
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 md:px-8">
+      {shareStatus && (
+        <div className={clsx(
+          "fixed left-1/2 top-4 z-[120] flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-3 text-sm font-bold shadow-ambient",
+          shareStatus === 'saved' && "border-success/20 bg-success/10 text-success",
+          shareStatus === 'duplicate' && "border-outline-variant/40 bg-surface-container-lowest text-on-surface",
+          shareStatus === 'error' && "border-error/20 bg-error/10 text-error"
+        )}>
+          {shareStatus === 'error' ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+          <span>
+            {shareStatus === 'saved'
+              ? '共有から保存しました'
+              : shareStatus === 'duplicate'
+                ? 'すでに保存済みのクリップです'
+                : shareMessage || '共有からの保存に失敗しました'}
+          </span>
+        </div>
+      )}
       
       {/* Filters / Metadata Header */}
       <div className="sticky top-[72px] z-20 py-4 bg-background/90 backdrop-blur-md flex flex-wrap items-center justify-between gap-4 mb-4 -mx-4 px-4 md:mx-0 md:px-0">

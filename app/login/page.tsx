@@ -68,10 +68,10 @@ export default function LoginPage() {
               alt=""
               width={160}
               height={160}
-              className="mb-10 h-40 w-40 rounded-[32px] border border-outline-variant/60 bg-surface-container-lowest object-cover"
+              className="mb-8 h-36 w-36 rounded-[32px] border border-outline-variant/60 bg-surface-container-lowest object-cover xl:h-40 xl:w-40"
               priority
             />
-            <h1 className="text-[3.25rem] xl:text-[4.5rem] leading-[1.15] tracking-normal font-light text-on-surface mb-6">
+            <h1 className="text-[3.05rem] xl:text-[3.65rem] leading-[1.16] tracking-normal font-light text-on-surface mb-6">
               投げ入れるように、<br />
               “気になる”を整理しよう。
             </h1>
@@ -82,7 +82,7 @@ export default function LoginPage() {
             </p>
           </motion.div>
 
-          <div className="mt-[4rem] xl:mt-[6rem] relative h-40">
+          <div className="mt-[3.5rem] xl:mt-[4.5rem] relative h-40">
             <motion.div 
               initial={{ opacity: 0, scale: 0.8, y: 0, rotate: -3 }}
               animate={{ 
