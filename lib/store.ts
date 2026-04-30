@@ -54,6 +54,7 @@ interface ClipStore {
   error: string | null;
   processingJobs: Record<string, string>; // clipId -> 'extracting' | 'enriching' | 'failed' | 'done'
   fetchClips: () => Promise<void>;
+  fetchClipDetail: (id: string) => Promise<Clip | null>;
   addClip: (clip: Omit<Clip, 'id' | 'timestamp'>) => void;
   updateClip: (id: string, updates: Partial<Clip>) => Promise<void>;
   deleteClip: (id: string) => Promise<void>;
@@ -96,6 +97,62 @@ const idbStorage: StateStorage = {
   removeItem: async (name: string): Promise<void> => {
     await del(name);
   },
+};
+
+const LIST_CLIP_SELECT = `
+  id,
+  title,
+  summary,
+  url,
+  source_domain,
+  created_at,
+  is_read,
+  is_archived,
+  is_bookmarked,
+  is_global_search,
+  preview_image_url,
+  content_type,
+  my_note,
+  category,
+  subcategory,
+  saved_from_clip_id,
+  clip_tags(name),
+  clip_collections(collection_id)
+`;
+
+const DETAIL_CLIP_SELECT = `
+  ${LIST_CLIP_SELECT},
+  extracted_content,
+  key_points
+`;
+
+const mapClipRow = (d: any, saveCount = 0): Clip => {
+  const type = typeMapping[d.content_type] || 'url';
+  return {
+    id: d.id,
+    type: type,
+    typeLabel: labelMapping[type],
+    title: d.title,
+    summary: d.summary,
+    body: d.extracted_content,
+    url: d.url,
+    domain: d.source_domain,
+    date: new Date(d.created_at).toLocaleDateString('ja-JP'),
+    timestamp: new Date(d.created_at).getTime(),
+    isUnread: !d.is_read,
+    stage2: !!d.summary,
+    isArchived: d.is_archived ?? false,
+    isBookmarked: d.is_bookmarked,
+    isGlobalSearch: d.is_global_search ?? false,
+    thumbnail: d.preview_image_url,
+    tags: d.clip_tags?.map((t: any) => t.name) || [],
+    collections: d.clip_collections?.map((c: any) => c.collection_id) || [],
+    userNote: d.my_note,
+    category: d.category ?? null,
+    subcategory: d.subcategory ?? null,
+    keyPoints: d.key_points ?? null,
+    saveCount,
+  };
 };
 
 export const useClipStore = create<ClipStore>()(
@@ -162,13 +219,23 @@ export const useClipStore = create<ClipStore>()(
   },
 
   reprocessExistingClips: async (onProgress) => {
-    const clips = getStore().clips;
-    const unprocessed = clips.filter(c => !c.summary && (c.body || c.title));
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data: rows, error } = await supabase
+      .from('clips')
+      .select('id, title, extracted_content, my_note, summary')
+      .eq('user_id', session.user.id)
+      .is('summary', null);
+    if (error) throw error;
+
+    const unprocessed = (rows ?? []).filter(row => row.extracted_content || row.my_note || row.title);
     const total = unprocessed.length;
     let done = 0;
 
     for (const clip of unprocessed) {
-      const content = clip.body || clip.title;
+      const content = clip.extracted_content || clip.my_note || clip.title;
       await getStore().processClipAI(clip.id, content);
       done++;
       onProgress?.(done, total);
@@ -199,7 +266,10 @@ export const useClipStore = create<ClipStore>()(
   },
 
   translateClip: async (clipId: string, targetLang: string): Promise<string | null> => {
-    const clip = getStore().clips.find(c => c.id === clipId);
+    let clip = getStore().clips.find(c => c.id === clipId);
+    if (clip && clip.body === undefined) {
+      clip = await getStore().fetchClipDetail(clipId) ?? clip;
+    }
     if (!clip) return null;
 
     const text = clip.summary || clip.body?.substring(0, 3000) || clip.title;
@@ -247,63 +317,74 @@ export const useClipStore = create<ClipStore>()(
 
       const { data, error } = await supabase
         .from('clips')
-        .select(`
-          *,
-          clip_tags(name),
-          clip_collections(collection_id)
-        `)
+        .select(LIST_CLIP_SELECT)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       if (data) {
-        const clipIds = data.map((d: any) => d.id);
-        let saveCounts: Record<string, number> = {};
+        const parsedClips: Clip[] = data.map((d: any) => mapClipRow(d, getStore().clips.find(c => c.id === d.id)?.saveCount ?? 0));
+        set({ clips: parsedClips, isLoading: false });
+
+        const clipIds = parsedClips.map(clip => clip.id);
         if (clipIds.length > 0) {
-          const { data: counts } = await supabase
-            .from('clips')
-            .select('saved_from_clip_id')
-            .in('saved_from_clip_id', clipIds);
-          if (counts) {
+          void (async () => {
+            const { data: counts, error: countError } = await supabase
+              .from('clips')
+              .select('saved_from_clip_id')
+              .in('saved_from_clip_id', clipIds);
+
+            if (countError || !counts) return;
+
+            const saveCounts: Record<string, number> = {};
             counts.forEach((c: any) => {
               if (c.saved_from_clip_id) saveCounts[c.saved_from_clip_id] = (saveCounts[c.saved_from_clip_id] ?? 0) + 1;
             });
-          }
-        }
 
-        const parsedClips: Clip[] = data.map((d: any) => {
-          const type = typeMapping[d.content_type] || 'url';
-          return {
-            id: d.id,
-            type: type,
-            typeLabel: labelMapping[type],
-            title: d.title,
-            summary: d.summary,
-            body: d.extracted_content,
-            url: d.url,
-            domain: d.source_domain,
-            date: new Date(d.created_at).toLocaleDateString('ja-JP'),
-            timestamp: new Date(d.created_at).getTime(),
-            isUnread: !d.is_read,
-            stage2: !!d.summary,
-            isArchived: d.is_archived ?? false,
-            isBookmarked: d.is_bookmarked,
-            isGlobalSearch: d.is_global_search ?? false,
-            thumbnail: d.preview_image_url,
-            tags: d.clip_tags?.map((t: any) => t.name) || [],
-            collections: d.clip_collections?.map((c: any) => c.collection_id) || [],
-            userNote: d.my_note,
-            category: d.category ?? null,
-            subcategory: d.subcategory ?? null,
-            keyPoints: d.key_points ?? null,
-            saveCount: saveCounts[d.id] ?? 0,
-          };
-        });
-        set({ clips: parsedClips, isLoading: false });
+            set(state => ({
+              clips: state.clips.map(clip => (
+                clipIds.includes(clip.id)
+                  ? { ...clip, saveCount: saveCounts[clip.id] ?? 0 }
+                  : clip
+              )),
+            }));
+          })();
+        }
       }
     } catch (error: any) {
       console.error('Error fetching clips:', error);
       set({ error: error.message, isLoading: false });
+    }
+  },
+
+  fetchClipDetail: async (id: string) => {
+    const supabase = createClient();
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+
+      const { data, error } = await supabase
+        .from('clips')
+        .select(DETAIL_CLIP_SELECT)
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+
+      const current = getStore().clips.find(clip => clip.id === id);
+      const parsed = mapClipRow(data, current?.saveCount ?? 0);
+      set(state => {
+        const exists = state.clips.some(clip => clip.id === id);
+        return {
+          clips: exists
+            ? state.clips.map(clip => clip.id === id ? { ...clip, ...parsed } : clip)
+            : [parsed, ...state.clips],
+        };
+      });
+      return parsed;
+    } catch (error) {
+      console.error('Error fetching clip detail:', error);
+      return null;
     }
   },
 

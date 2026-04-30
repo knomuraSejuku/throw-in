@@ -32,18 +32,20 @@ function LibraryContent() {
   useEffect(() => {
     if (!processClipId || isLoading || processingJobs[processClipId]) return;
 
-    const clip = clips.find(c => c.id === processClipId);
-    if (!clip) return;
-
-    const content = clip.body || clip.userNote || clip.title;
-    if (!content || content.trim().length <= 10) return;
-
-    useClipStore.getState().processClipAI(processClipId, content);
+    const processSharedClip = async () => {
+      const res = await fetch('/api/batch-process-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clipIds: [processClipId] }),
+      });
+      if (res.ok) await fetchClips();
+    };
+    processSharedClip();
 
     const params = new URLSearchParams(searchParams.toString());
     params.delete('process');
     router.replace(`/?${params.toString()}`, { scroll: false });
-  }, [clips, isLoading, processClipId, processingJobs, router, searchParams]);
+  }, [fetchClips, isLoading, processClipId, processingJobs, router, searchParams]);
 
   // Local View States
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -425,7 +427,7 @@ function LibraryContent() {
         </div>
       )}
 
-      {isLoading ? (
+      {isLoading && clips.length === 0 ? (
         <div className="w-full py-20 flex flex-col items-center justify-center text-outline">
           <Loader2 className="w-8 h-8 animate-spin mb-4" />
           <p className="text-sm font-medium">クリップを読み込んでいます...</p>

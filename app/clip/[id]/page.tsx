@@ -38,7 +38,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
   const unwrappedParams = use(params);
   const id = unwrappedParams.id;
   
-  const { clips, fetchClips, toggleRead, toggleBookmark, deleteClip, archiveClip, translateClip, updateClip, isLoading, processingJobs, processClipAI } = useClipStore();
+  const { clips, fetchClips, fetchClipDetail, toggleRead, toggleBookmark, deleteClip, archiveClip, translateClip, updateClip, isLoading, processingJobs, processClipAI } = useClipStore();
   const { collections, fetchCollections, addClipToCollection, removeClipFromCollection } = useCollectionStore();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showCollectionMenu, setShowCollectionMenu] = useState(false);
@@ -51,6 +51,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
   const [isBodyExpanded, setIsBodyExpanded] = useState(false);
   const [isTagsExpanded, setIsTagsExpanded] = useState(false);
   const [showStickyHeader, setShowStickyHeader] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [readEffect, setReadEffect] = useState<{ origin: { x: number; y: number } } | null>(null);
   const [showAiEffect, setShowAiEffect] = useState(false);
   const prevIsUnreadRef = useRef<boolean | undefined>(undefined);
@@ -69,8 +70,23 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
   }, [fetchCollections]);
 
   const clip = clips.find(c => c.id === id);
+  const needsDetail = !clip || clip.body === undefined || clip.keyPoints === undefined;
   const clipId = clip?.id;
   const clipIsUnread = clip?.isUnread;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!needsDetail) return;
+
+    setIsDetailLoading(true);
+    fetchClipDetail(id).finally(() => {
+      if (!cancelled) setIsDetailLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchClipDetail, id, needsDetail]);
 
   // Record history when clip is loaded
   useEffect(() => {
@@ -132,7 +148,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
     return () => clearTimeout(timer);
   }, [clipId, clipIsUnread, toggleRead]);
 
-  if (isLoading && !clip) {
+  if ((isLoading && !clip) || isDetailLoading) {
     return (
       <AppShell>
         <div className="flex h-screen items-center justify-center">
