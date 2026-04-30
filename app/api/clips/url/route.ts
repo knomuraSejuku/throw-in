@@ -96,6 +96,39 @@ async function extractUrl(origin: string, normalizedUrl: string) {
   return extractedData;
 }
 
+async function processCreatedClip(req: NextRequest, clipId: string, content: string, clipTitle: string) {
+  if (!content.trim() || content.trim().length <= 10) {
+    return { processed: false, error: 'No content for AI processing' };
+  }
+
+  try {
+    const response = await fetch(`${req.nextUrl.origin}/api/process-ai`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: req.headers.get('cookie') || '',
+      },
+      body: JSON.stringify({
+        clipId,
+        content,
+        existingTags: [],
+        clipTitle,
+      }),
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      console.warn('[clips:url:ai_failed]', { clipId, status: response.status, detail: detail.slice(0, 500) });
+      return { processed: false, error: detail.slice(0, 200) || response.statusText };
+    }
+
+    return { processed: true, error: null };
+  } catch (error) {
+    console.warn('[clips:url:ai_failed]', { clipId, error: error instanceof Error ? error.message : String(error) });
+    return { processed: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 export async function POST(req: NextRequest) {
   const { supabase, user } = await getAuthedSupabase();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -119,6 +152,9 @@ export async function POST(req: NextRequest) {
   let clipId: string | null = null;
   let created = false;
   let bodyForAi = '';
+  let aiProcessed = false;
+  let aiError: string | null = null;
+  let savedTitle = titleOverride;
 
   const { data: existing } = await lookup
     .from('clips')
@@ -142,6 +178,7 @@ export async function POST(req: NextRequest) {
     const parsedUrl = new URL(normalizedUrl);
     const extractedBody = extractedData?.body || extractedData?.description || null;
     const title = titleOverride || deriveReadableTitle(extractedData?.title, extractedBody, normalizedUrl);
+    savedTitle = title;
     bodyForAi = extractedBody || note;
 
     const { data: inserted, error: insertError } = await supabase
@@ -184,5 +221,11 @@ export async function POST(req: NextRequest) {
     })));
   }
 
-  return NextResponse.json({ clipId, created, normalizedUrl, body: bodyForAi || null });
+  if (created && clipId) {
+    const ai = await processCreatedClip(req, clipId, bodyForAi, savedTitle);
+    aiProcessed = ai.processed;
+    aiError = ai.error;
+  }
+
+  return NextResponse.json({ clipId, created, normalizedUrl, body: aiProcessed ? null : bodyForAi || null, aiProcessed, aiError });
 }

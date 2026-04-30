@@ -586,6 +586,7 @@ interface CollectionStore {
   isLoading: boolean;
   fetchCollections: () => Promise<void>;
   createCollection: (name: string, description?: string) => Promise<Collection | null>;
+  deleteCollection: (id: string) => Promise<boolean>;
   addClipToCollection: (clipId: string, collectionId: string) => Promise<boolean>;
   removeClipFromCollection: (clipId: string, collectionId: string) => Promise<boolean>;
 }
@@ -637,6 +638,25 @@ export const useCollectionStore = create<CollectionStore>()(
 
         set(state => ({ collections: [data, ...state.collections] }));
         return data as Collection;
+      },
+
+      deleteCollection: async (id) => {
+        const currentCollections = get().collections;
+        set(state => ({ collections: state.collections.filter(collection => collection.id !== id) }));
+
+        const supabase = createClient();
+        const { error } = await supabase
+          .from('collections')
+          .delete()
+          .eq('id', id);
+
+        if (error) {
+          console.error(error);
+          set({ collections: currentCollections });
+          return false;
+        }
+
+        return true;
       },
 
       addClipToCollection: async (clipId, collectionId) => {

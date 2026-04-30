@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CircleDot } from 'lucide-react';
 import { AppShell } from '@/components/shell/AppShell';
 
 export const metadata = {
@@ -53,43 +53,50 @@ const RELEASES = [
 ];
 
 const TYPE_COLORS: Record<string, string> = {
-  feat: 'bg-primary/10 text-primary',
-  improve: 'bg-secondary/10 text-secondary',
-  fix: 'bg-tertiary/10 text-tertiary',
+  feat: 'bg-primary text-on-primary',
+  improve: 'bg-surface-container-high text-on-surface',
+  fix: 'bg-success-container text-success',
 };
 
 export default function ChangelogPage() {
   return (
     <AppShell>
-      <div className="w-full max-w-2xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-8">
-        <Link href="/" className="brand-button-secondary">
-          <ArrowLeft className="w-4 h-4" />
-          ライブラリへ
-        </Link>
-
-        <div className="space-y-1">
-          <h1 className="brand-page-title">更新情報</h1>
-          <p className="brand-page-kicker">Throw In の新機能・改善・バグ修正の記録</p>
+      <div className="w-full max-w-4xl mx-auto px-4 md:px-8 py-8 md:py-12 space-y-8">
+        <div className="flex items-center justify-between gap-4">
+          <Link href="/" className="brand-button-secondary">
+            <ArrowLeft className="w-4 h-4" />
+            ライブラリへ
+          </Link>
+          <span className="brand-chip">Release Notes</span>
         </div>
 
-        <div className="space-y-10">
+        <header className="border-b border-outline-variant/20 pb-8">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-outline">Changelog</p>
+          <h1 className="brand-page-title">更新情報</h1>
+          <p className="brand-page-kicker mt-3">Throw In の変更を、必要な粒度で記録します。</p>
+        </header>
+
+        <div className="space-y-5">
           {RELEASES.map(release => (
-            <div key={release.version} className="space-y-4">
-              <div className="flex items-center gap-3">
-                <span className="text-lg font-bold text-on-surface">v{release.version}</span>
-                <span className="text-xs text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">{release.date}</span>
+            <section key={release.version} className="brand-panel p-5 md:p-6">
+              <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <CircleDot className="h-4 w-4 text-on-surface" />
+                  <h2 className="text-lg font-semibold text-on-surface">v{release.version}</h2>
+                </div>
+                <time className="text-xs font-semibold text-on-surface-variant">{release.date}</time>
               </div>
-              <ul className="space-y-2">
+              <ul className="divide-y divide-outline-variant/15">
                 {release.entries.map((entry, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <span className={`mt-0.5 flex-shrink-0 text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full ${TYPE_COLORS[entry.type] ?? 'bg-surface-container text-on-surface-variant'}`}>
+                  <li key={i} className="grid gap-2 py-3 sm:grid-cols-[88px_1fr] sm:items-start">
+                    <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${TYPE_COLORS[entry.type] ?? 'bg-surface-container text-on-surface-variant'}`}>
                       {entry.label}
                     </span>
                     <span className="text-sm text-on-surface-variant leading-relaxed">{entry.text}</span>
                   </li>
                 ))}
               </ul>
-            </div>
+            </section>
           ))}
         </div>
       </div>

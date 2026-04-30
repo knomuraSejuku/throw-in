@@ -1,17 +1,33 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import type React from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/shell/AppShell';
 import { useCollectionStore } from '@/lib/store';
-import { Folder, Loader2, Plus } from 'lucide-react';
+import { Folder, Loader2, Plus, Trash2 } from 'lucide-react';
 import { CreateCollectionDialog } from '@/components/collections/CreateCollectionDialog';
 
 export default function CollectionsPage() {
-  const { collections, fetchCollections, isLoading } = useCollectionStore();
+  const { collections, fetchCollections, deleteCollection, isLoading } = useCollectionStore();
   const [showDialog, setShowDialog] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => { fetchCollections(); }, [fetchCollections]);
+
+  const handleDelete = async (event: React.MouseEvent, id: string, name: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (deletingId) return;
+    if (!window.confirm(`「${name}」を削除しますか？クリップ自体は削除されません。`)) return;
+
+    setDeletingId(id);
+    try {
+      await deleteCollection(id);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <AppShell>
@@ -57,8 +73,17 @@ export default function CollectionsPage() {
               <Link
                 key={col.id}
                 href={`/?collection=${col.id}`}
-                className="bg-surface-container-lowest p-6 rounded-[32px] shadow-ambient hover:shadow-card-hover hover:-translate-y-1 transition-all group"
+                className="group relative bg-surface-container-lowest p-6 rounded-[32px] shadow-ambient hover:shadow-card-hover hover:-translate-y-1 transition-all"
               >
+                <button
+                  type="button"
+                  onClick={(event) => handleDelete(event, col.id, col.name)}
+                  disabled={deletingId === col.id}
+                  className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-outline-variant/25 bg-surface-container-lowest text-on-surface-variant opacity-100 transition-all hover:bg-error-container hover:text-error focus:opacity-100 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
+                  title="コレクションを削除"
+                >
+                  {deletingId === col.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </button>
                 <div className="w-12 h-12 bg-secondary/10 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-secondary/20 transition-colors">
                   <Folder className="w-6 h-6 text-secondary" />
                 </div>

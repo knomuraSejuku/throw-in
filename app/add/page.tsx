@@ -292,7 +292,7 @@ function AddClipForm() {
         if (!res.ok) throw new Error(data?.error || 'URLクリップの保存に失敗しました');
 
         await useClipStore.getState().fetchClips();
-        if (data?.created && data?.body && String(data.body).trim().length > 10) {
+        if (data?.created && !data?.aiProcessed && data?.body && String(data.body).trim().length > 10) {
           useClipStore.getState().processClipAI(data.clipId, data.body);
         } else {
           useClipStore.getState().updateProcessingJob(data.clipId, 'done');

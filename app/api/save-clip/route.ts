@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
     .select('*')
     .eq('id', clipId)
     .eq('is_global_search', true)
+    .eq('is_hidden', false)
     .single();
 
   if (srcErr || !src) return NextResponse.json({ error: 'Clip not found or not public' }, { status: 404 });

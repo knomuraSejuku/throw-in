@@ -103,6 +103,7 @@ export async function GET(req: NextRequest) {
       users (display_name, avatar_emoji)
     `)
     .eq('is_global_search', true)
+    .eq('is_hidden', false)
     .order('created_at', { ascending: false })
     .limit(limit);
 

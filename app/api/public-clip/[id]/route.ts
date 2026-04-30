@@ -23,6 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     `)
     .eq('id', id)
     .eq('is_global_search', true)
+    .eq('is_hidden', false)
     .single();
 
   if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 });
