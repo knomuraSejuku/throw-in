@@ -121,7 +121,7 @@ function SidebarContent() {
   }, [clips]);
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-hidden bg-surface-container-lowest border-r border-outline-variant/10">
+    <aside className="app-sidebar fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-hidden bg-surface-container-lowest border-r border-outline-variant/10">
 
       {/* Fixed header */}
       <div className="flex-shrink-0 px-6 py-5 border-b border-outline-variant/10 bg-surface-container-lowest/80 backdrop-blur-xl">
@@ -397,7 +397,7 @@ function SidebarContent() {
         </div>
       </div>
 
-      <div className="absolute inset-x-4 bottom-0 shrink-0 border-t border-outline-variant/10 bg-surface-container-lowest py-4 space-y-1">
+      <div className="app-sidebar-footer absolute inset-x-4 bottom-0 shrink-0 border-t border-outline-variant/10 bg-surface-container-lowest py-4 space-y-1">
         {footerNav.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -406,7 +406,7 @@ function SidebarContent() {
               type="button"
               onClick={() => router.push(item.href)}
               className={clsx(
-                "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors",
+                "app-sidebar-footer-item flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors",
                 isActive
                   ? "bg-primary-container text-on-primary-container"
                   : "text-on-surface-variant hover:bg-surface-container-high"

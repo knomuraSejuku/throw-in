@@ -894,6 +894,11 @@
     - **対応:** サイドバーfooterの `通知` / `インサイト` / `更新情報` / `設定` 全てを `Link` から `button + router.push()` に変更し、ブラウザ上のリンクhover判定領域を除去
     - **対応:** footerを `absolute inset-x-4 bottom-0` のサイドバー内固定領域に変更し、スクロール本体には `pb-80` を付与してfooterと内容が重ならないようにした
     - **確認:** `components/shell/SidebarNav.tsx` 内に `/notifications` / `/insights` / `/changelog` / `/settings` のfooterアンカーが残っていないことを確認
+  - **追加ハードニング（2026-04-30）:**
+    - **対象:** `/notifications` / `/insights` / `/changelog` / `/settings` の4項目すべて
+    - **対応:** `app-sidebar` / `app-sidebar-footer` / `app-sidebar-footer-item` の専用CSSを追加し、サイドバー本体を18rem、footer領域を16remに `!important` で固定
+    - **対応:** `clip-path: inset(0)` / `contain: layout paint` / `overflow: hidden` を付与し、footerボタンのhover/click判定がサイドバー幅を越えてメインカラムへ漏れないようにした
+    - **意図:** Tailwind classやpositioningの解釈差、hydration中の一時レイアウト、hover領域の横伸びが起きても、4項目の判定領域をサイドバー内に強制的に閉じ込める
   - ファイル: `components/shell/SidebarNav.tsx`, `components/shell/AppShell.tsx`, `components/shell/BottomNavBar.tsx`, `components/shell/TopNavBar.tsx`
 
 - [x] **K13** グローバルクリップにコメントが反映されない問題の修正

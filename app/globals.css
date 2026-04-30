@@ -127,6 +127,36 @@
 
 /* ── Prose / Article Body ─────────────────────────────────────────── */
 @layer components {
+  .app-sidebar {
+    left: 0 !important;
+    right: auto !important;
+    width: 18rem !important;
+    max-width: 18rem !important;
+    min-width: 18rem !important;
+    clip-path: inset(0);
+    contain: layout paint;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  .app-sidebar-footer {
+    left: 1rem !important;
+    right: auto !important;
+    width: 16rem !important;
+    max-width: 16rem !important;
+    min-width: 0 !important;
+    clip-path: inset(0);
+    contain: layout paint;
+    overflow: hidden;
+  }
+
+  .app-sidebar-footer-item {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden;
+  }
+
   .prose-body {
     color: var(--color-on-surface-variant);
     line-height: 1.9;
