@@ -46,6 +46,8 @@ export interface Clip {
   subcategory?: string | null;
   keyPoints?: string | null;
   saveCount?: number;
+  ownerId?: string | null;
+  isOwner?: boolean;
 }
 
 interface ClipStore {
@@ -101,6 +103,7 @@ const idbStorage: StateStorage = {
 
 const LIST_CLIP_SELECT = `
   id,
+  user_id,
   title,
   summary,
   url,
@@ -127,6 +130,7 @@ const DETAIL_CLIP_SELECT = `
 `;
 
 const SAVED_CLIP_SELECT = `
+  user_id,
   my_note,
   is_bookmarked,
   is_read,
@@ -138,6 +142,7 @@ const SAVED_CLIP_SELECT = `
 `;
 
 const SAVED_CLIP_DETAIL_SELECT = `
+  user_id,
   my_note,
   is_bookmarked,
   is_read,
@@ -175,6 +180,8 @@ const mapClipRow = (d: any, saveCount = 0, save?: any): Clip => {
     subcategory: d.subcategory ?? null,
     keyPoints: d.key_points ?? null,
     saveCount,
+    ownerId: d.user_id ?? null,
+    isOwner: save?.user_id ? d.user_id === save.user_id : undefined,
   };
 };
 

@@ -116,6 +116,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
   }, [clip?.id]);
 
   const clipProcessingJob = clip ? (processingJobs[clip.id] ?? null) : null;
+  const canEditCanonicalClip = Boolean(clip?.isOwner);
 
   // AI処理完了検知: processingJobs[id] が 'done' になったタイミングで消費
   useEffect(() => {
@@ -274,6 +275,14 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
               <button onClick={() => toggleBookmark(clip.id)} className={clsx('p-1.5 rounded-full transition-colors', clip.isBookmarked ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface')} title={clip.isBookmarked ? 'ブックマーク解除' : 'ブックマーク'}>
                 {clip.isBookmarked ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
               </button>
+              <button
+                onClick={() => processClipAI(clip.id, clip.body || clip.userNote || '')}
+                disabled={processingJobs[clip.id] === 'enriching'}
+                className="p-1.5 rounded-full bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-colors disabled:opacity-50"
+                title="更新を確認"
+              >
+                <RefreshCw className={clsx("w-4 h-4", processingJobs[clip.id] === 'enriching' && "animate-spin")} />
+              </button>
               <button onClick={handleArchive} className={clsx("p-1.5 rounded-full transition-colors", clip.isArchived ? "bg-secondary/10 text-secondary hover:bg-secondary/20" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest")} title={clip.isArchived ? "アーカイブ解除" : "アーカイブ"}>
                 {clip.isArchived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
               </button>
@@ -358,6 +367,14 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
               {clip.isBookmarked ? <BookmarkCheck className="w-5 h-5" /> : <Bookmark className="w-5 h-5" />}
             </button>
             <button
+              onClick={() => processClipAI(clip.id, clip.body || clip.userNote || '')}
+              disabled={processingJobs[clip.id] === 'enriching'}
+              className="p-2 rounded-full bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest transition-colors disabled:opacity-50"
+              title="更新を確認"
+            >
+              <RefreshCw className={clsx("w-5 h-5", processingJobs[clip.id] === 'enriching' && "animate-spin")} />
+            </button>
+            <button
               onClick={handleArchive}
               className={clsx("p-2 rounded-full transition-colors", clip.isArchived ? "bg-secondary/10 text-secondary hover:bg-secondary/20" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest")}
               title={clip.isArchived ? "アーカイブ解除" : "アーカイブ"}
@@ -414,11 +431,18 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
             </div>
           ) : (
             <h1
-              className="group text-3xl md:text-5xl font-bold text-on-surface tracking-tight leading-snug mb-6 cursor-pointer flex items-start gap-3"
-              onClick={() => { setTitleDraft(clip.title); setEditingTitle(true); }}
+              className={clsx(
+                "group text-3xl md:text-5xl font-bold text-on-surface tracking-tight leading-snug mb-6 flex items-start gap-3",
+                canEditCanonicalClip && "cursor-pointer"
+              )}
+              onClick={() => {
+                if (!canEditCanonicalClip) return;
+                setTitleDraft(clip.title);
+                setEditingTitle(true);
+              }}
             >
               <span>{clip.title}</span>
-              <Pencil className="w-5 h-5 mt-2 opacity-0 group-hover:opacity-40 shrink-0 transition-opacity" />
+              {canEditCanonicalClip && <Pencil className="w-5 h-5 mt-2 opacity-0 group-hover:opacity-40 shrink-0 transition-opacity" />}
             </h1>
           )}
 
@@ -531,7 +555,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <p className="text-sm font-medium">
                 {processingJobs[clip.id] === 'failed'
-                  ? "AI処理に失敗しました。再処理をお試しください。"
+                  ? "更新確認に失敗しました。時間を置いて再実行してください。"
                   : "このクリップはまだAIに整理されていません。"}
               </p>
             </div>
@@ -541,7 +565,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-surface-container-high text-on-surface text-xs font-bold hover:bg-surface-container-highest transition-colors shrink-0 disabled:opacity-50"
             >
               <RefreshCw className={clsx("w-3.5 h-3.5", processingJobs[clip.id] === 'enriching' && "animate-spin")} />
-              再処理
+              更新を確認
             </button>
           </div>
         )}

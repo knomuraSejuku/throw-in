@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (Array.isArray(body.tags)) {
     await supabase.from('clip_tags').delete().eq('clip_id', id);
     if (body.tags.length > 0) {
-      const rows = body.tags.map(name => ({ clip_id: id, name }));
+      const rows = body.tags.map(name => ({ clip_id: id, name, user_id: user.id }));
       const { error } = await supabase.from('clip_tags').insert(rows);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { createHash } from 'crypto';
 
 const CATEGORY_TAXONOMY: Record<string, string[]> = {
   'Technology':  ['AI/ML', 'Web開発', 'セキュリティ', 'ハードウェア', 'モバイル', 'データサイエンス', 'クラウド'],
@@ -16,6 +17,8 @@ const CATEGORY_TAXONOMY: Record<string, string[]> = {
 };
 
 const MAX_AI_TAGS = 20;
+const AI_METADATA_MODEL = 'gpt-5.4-nano';
+const AI_EMBEDDING_MODEL = 'text-embedding-3-small';
 const GENERIC_CLIP_TITLES = new Set([
   'x post',
   'x article',
@@ -69,6 +72,12 @@ function getMetadataClient() {
     serviceKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
+}
+
+function hashVersionSource(content: string, title: string) {
+  return createHash('sha256')
+    .update(`${content.trim()}\n---\n${title.trim()}`)
+    .digest('hex');
 }
 
 function normalizeTags(tags: unknown): string[] {
@@ -176,7 +185,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
       body: JSON.stringify({
-        model: 'gpt-5.4-nano',
+        model: AI_METADATA_MODEL,
         text: { format: { type: 'json_object' } },
         input: [
           { role: 'system', content: systemPrompt },
@@ -231,7 +240,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
     const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
-      body: JSON.stringify({ model: 'text-embedding-3-small', input: embedInput }),
+      body: JSON.stringify({ model: AI_EMBEDDING_MODEL, input: embedInput }),
     });
     if (embedRes.ok) {
       const embedData = await embedRes.json();
@@ -248,7 +257,8 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
     ? aiGeneratedTitle
     : null;
 
-  // Persist to DB
+  // Persist to DB and keep a version history. The latest successful AI organization
+  // becomes the current canonical version for this shared clip.
   const dbUpdate: Record<string, unknown> = { summary: aiSummary };
   if (nextTitle) dbUpdate.title = nextTitle;
   if (embeddingVector) dbUpdate.embedding = embeddingVector;
@@ -256,6 +266,82 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
   if (aiSubcategory) dbUpdate.subcategory = aiSubcategory;
   if (aiKeyPoints) dbUpdate.key_points = aiKeyPoints;
   const metadataClient = getMetadataClient() ?? supabase;
+
+  let usageEventId: string | null = null;
+  const { data: usageEvent, error: usageError } = await metadataClient
+    .from('ai_usage_events')
+    .insert({
+      user_id: user.id,
+      clip_id: clipId,
+      action: 'clip_version',
+      model: AI_METADATA_MODEL,
+      status: 'succeeded',
+      metadata: {
+        embedding_model: embeddingVector ? AI_EMBEDDING_MODEL : null,
+        title_updated: Boolean(nextTitle),
+        tags_count: mergedTags.length,
+      },
+    })
+    .select('id')
+    .single();
+
+  if (usageError) {
+    console.error('Failed to persist AI usage event', usageError);
+  } else {
+    usageEventId = usageEvent.id;
+  }
+
+  const sourceHash = hashVersionSource(content, nextTitle || currentTitle || clipTitle || '');
+  const { data: latestVersion, error: latestVersionError } = await metadataClient
+    .from('clip_versions')
+    .select('version_number, source_hash')
+    .eq('clip_id', clipId)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let currentVersionId: string | null = null;
+  const canPersistVersion = !latestVersionError;
+  if (!canPersistVersion) {
+    console.error('Failed to load latest clip version; continuing without version history', latestVersionError);
+  } else if (latestVersion?.source_hash === sourceHash) {
+    await metadataClient
+      .from('clips')
+      .update({ last_refreshed_at: new Date().toISOString() })
+      .eq('id', clipId);
+  } else if (canPersistVersion) {
+    const { data: version, error: versionError } = await metadataClient
+      .from('clip_versions')
+      .insert({
+        clip_id: clipId,
+        version_number: (latestVersion?.version_number ?? 0) + 1,
+        source_url: clip.url || null,
+        source_hash: sourceHash,
+        title: nextTitle || currentTitle || clipTitle || '無題のクリップ',
+        summary: aiSummary,
+        extracted_content: content,
+        tags: mergedTags,
+        category: aiCategory,
+        subcategory: aiSubcategory,
+        key_points: aiKeyPoints,
+        created_by: user.id,
+        created_reason: latestVersion ? 'refresh' : 'initial',
+        ai_model: AI_METADATA_MODEL,
+        ai_usage_event_id: usageEventId,
+      })
+      .select('id')
+      .single();
+
+    if (versionError) {
+      console.error('Failed to persist clip version', versionError);
+      return NextResponse.json({ error: 'Failed to persist clip version', detail: versionError.message }, { status: 500 });
+    }
+
+    currentVersionId = version.id;
+    dbUpdate.current_version_id = currentVersionId;
+    dbUpdate.last_refreshed_at = new Date().toISOString();
+  }
+
   const { error: updateError } = await metadataClient.from('clips').update(dbUpdate).eq('id', clipId);
   if (updateError) {
     console.error('Failed to persist AI metadata', updateError);
