@@ -1,5 +1,6 @@
 'use client';
 
+import { AppShell } from '@/components/shell/AppShell';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { X, Link as LinkIcon, Upload, Edit3, Tag as TagIcon, Plus, Loader2, CheckCircle, Globe, FileText } from 'lucide-react';
 import { useState, useRef, useEffect, Suspense } from 'react';
@@ -487,9 +488,9 @@ function AddClipForm() {
   };
 
   return (
-    <div className="min-h-[100dvh] overflow-hidden bg-background">
-      <div className="fixed inset-0 z-[100] flex items-stretch justify-center overflow-y-auto bg-background px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] md:items-center md:bg-on-surface/20 md:p-6 md:backdrop-blur-sm">
-        <div className="relative flex min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-surface-container-lowest shadow-2xl md:max-h-[calc(100dvh-3rem)] md:flex-row md:rounded-[32px]">
+    <AppShell>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-on-surface/20 px-3 py-4 backdrop-blur-sm [height:100dvh] [height:100svh] md:p-6">
+        <div className="relative flex min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-surface-container-lowest shadow-2xl max-h-[calc(100svh-2rem)] md:max-h-[calc(100dvh-3rem)] md:flex-row md:rounded-[32px]">
           
           <button 
             onClick={() => router.back()}
@@ -842,14 +843,16 @@ function AddClipForm() {
 
       </div>
       {isSaved && <CelebrationEffect type="save" origin={saveOrigin} />}
-    </div>
+    </AppShell>
   );
 }
 
 export default function AddClipPage() {
   return (
     <Suspense fallback={
-      <div className="flex h-[100dvh] items-center justify-center bg-background"><Loader2 className="w-8 h-8 animate-spin" /></div>
+      <AppShell>
+        <div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin" /></div>
+      </AppShell>
     }>
       <AddClipForm />
     </Suspense>
