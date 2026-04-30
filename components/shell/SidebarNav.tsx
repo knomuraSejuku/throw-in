@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Library, Bookmark, History, Settings, FileText, Video, Image as ImageIcon, File, PenLine, Hash, Folder, Plus, ChevronDown, ChevronRight, LayoutGrid, Users, ScrollText, BarChart2, Bell } from 'lucide-react';
 import clsx from 'clsx';
 import { Suspense, useEffect, useState, useMemo } from 'react';
@@ -9,6 +9,7 @@ import { useCollectionStore, useClipStore, CATEGORY_TAXONOMY } from '@/lib/store
 
 function SidebarContent() {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const currentFilter = searchParams.get('filter');
   const currentType = searchParams.get('type');
@@ -52,6 +53,13 @@ function SidebarContent() {
     { label: 'ブックマーク', href: '/?filter=bookmarked', icon: Bookmark, isActive: currentFilter === 'bookmarked' },
     { label: '履歴', href: '/history', icon: History, isActive: pathname === '/history' },
     { label: 'フォロー中', href: '/following', icon: Users, isActive: pathname === '/following' },
+  ];
+
+  const footerNav = [
+    { label: '通知', href: '/notifications', icon: Bell },
+    { label: 'インサイト', href: '/insights', icon: BarChart2 },
+    { label: '更新情報', href: '/changelog', icon: ScrollText },
+    { label: '設定', href: '/settings', icon: Settings },
   ];
 
   const typeNav = [
@@ -128,7 +136,7 @@ function SidebarContent() {
         </Link>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto py-6 px-4 space-y-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-80 space-y-2">
         {/* Main Views */}
         <div className="space-y-1 pb-4">
           {mainNav.map((item) => (
@@ -389,47 +397,26 @@ function SidebarContent() {
         </div>
       </div>
 
-      <div className="shrink-0 px-4 py-4 border-t border-outline-variant/10 bg-surface-container-lowest space-y-1">
-        <Link
-          href="/notifications"
-          className={clsx(
-            "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all font-medium text-sm",
-            pathname === '/notifications' ? "bg-primary-container text-on-primary-container" : "text-on-surface-variant hover:bg-surface-container-high"
-          )}
-        >
-          <Bell className="w-5 h-5 flex-shrink-0" />
-          <span>通知</span>
-        </Link>
-        <Link
-          href="/insights"
-          className={clsx(
-            "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all font-medium text-sm",
-            pathname === '/insights' ? "bg-primary-container text-on-primary-container" : "text-on-surface-variant hover:bg-surface-container-high"
-          )}
-        >
-          <BarChart2 className="w-5 h-5 flex-shrink-0" />
-          <span>インサイト</span>
-        </Link>
-        <Link
-          href="/changelog"
-          className={clsx(
-            "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all font-medium text-sm",
-            pathname === '/changelog' ? "bg-primary-container text-on-primary-container" : "text-on-surface-variant hover:bg-surface-container-high"
-          )}
-        >
-          <ScrollText className="w-5 h-5 flex-shrink-0" />
-          <span>更新情報</span>
-        </Link>
-        <Link
-          href="/settings"
-          className={clsx(
-            "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all font-medium text-sm",
-            pathname === '/settings' ? "bg-primary-container text-on-primary-container" : "text-on-surface-variant hover:bg-surface-container-high"
-          )}
-        >
-          <Settings className="w-5 h-5 flex-shrink-0" />
-          <span>設定</span>
-        </Link>
+      <div className="absolute inset-x-4 bottom-0 shrink-0 border-t border-outline-variant/10 bg-surface-container-lowest py-4 space-y-1">
+        {footerNav.map((item) => {
+          const isActive = pathname === item.href;
+          return (
+            <button
+              key={item.href}
+              type="button"
+              onClick={() => router.push(item.href)}
+              className={clsx(
+                "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-primary-container text-on-primary-container"
+                  : "text-on-surface-variant hover:bg-surface-container-high"
+              )}
+            >
+              <item.icon className="w-5 h-5 flex-shrink-0" />
+              <span className="truncate">{item.label}</span>
+            </button>
+          );
+        })}
       </div>
     </aside>
   );

@@ -888,6 +888,12 @@
   - **確認結果:**
     - `npm run lint` 通過
     - `npm run build` 通過
+  - **追加修正（2026-04-30）:**
+    - **残存症状:** 実画面でメインカラム上部/下部に薄い青の横長hover領域が残り、hover時にブラウザ左下へ `/notifications` / `/insights` / `/changelog` / `/settings` のいずれかが表示されていた
+    - **原因再判定:** サイドバーfooterの `通知` / `インサイト` / `更新情報` / `設定` のアンカー領域が、視覚上サイドバー外のメインカラムに重なってクリック/hover判定を持っていた
+    - **対応:** サイドバーfooterの `通知` / `インサイト` / `更新情報` / `設定` 全てを `Link` から `button + router.push()` に変更し、ブラウザ上のリンクhover判定領域を除去
+    - **対応:** footerを `absolute inset-x-4 bottom-0` のサイドバー内固定領域に変更し、スクロール本体には `pb-80` を付与してfooterと内容が重ならないようにした
+    - **確認:** `components/shell/SidebarNav.tsx` 内に `/notifications` / `/insights` / `/changelog` / `/settings` のfooterアンカーが残っていないことを確認
   - ファイル: `components/shell/SidebarNav.tsx`, `components/shell/AppShell.tsx`, `components/shell/BottomNavBar.tsx`, `components/shell/TopNavBar.tsx`
 
 - [x] **K13** グローバルクリップにコメントが反映されない問題の修正
