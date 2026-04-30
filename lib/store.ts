@@ -199,7 +199,12 @@ export const useClipStore = create<ClipStore>()(
       },
 
   processClipAI: async (clipId: string, content: string) => {
-    if (!content?.trim()) {
+    const targetClip = getStore().clips.find(c => c.id === clipId);
+    const effectiveContent = content?.trim()
+      ? content
+      : targetClip?.body || targetClip?.userNote || targetClip?.summary || targetClip?.title || '';
+
+    if (!effectiveContent.trim()) {
       console.warn('Skipping AI processing because clip content is empty', { clipId });
       getStore().updateProcessingJob(clipId, 'failed');
       return;
@@ -208,7 +213,6 @@ export const useClipStore = create<ClipStore>()(
     getStore().updateProcessingJob(clipId, 'enriching');
 
     try {
-      const targetClip = getStore().clips.find(c => c.id === clipId);
       const existingTags = Array.from(
         new Set(getStore().clips.flatMap(c => c.tags || []))
       ).slice(0, 200);
@@ -218,7 +222,7 @@ export const useClipStore = create<ClipStore>()(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clipId,
-          content,
+          content: effectiveContent,
           existingTags,
           clipTitle: targetClip?.title || '',
         }),
@@ -247,18 +251,30 @@ export const useClipStore = create<ClipStore>()(
     if (!session) return;
 
     const { data: rows, error } = await supabase
-      .from('clips')
-      .select('id, title, extracted_content, my_note, summary')
-      .eq('user_id', session.user.id)
-      .is('summary', null);
+      .from('clip_saves')
+      .select(`
+        my_note,
+        clips (
+          id,
+          title,
+          extracted_content,
+          my_note,
+          summary
+        )
+      `)
+      .eq('user_id', session.user.id);
     if (error) throw error;
 
-    const unprocessed = (rows ?? []).filter(row => row.extracted_content || row.my_note || row.title);
+    const unprocessed = (rows ?? []).flatMap((row: any) => {
+      const clip = Array.isArray(row.clips) ? row.clips[0] : row.clips;
+      if (!clip) return [];
+      return [{ ...clip, saved_note: row.my_note }];
+    }).filter(row => !row.summary && (row.extracted_content || row.saved_note || row.my_note || row.title));
     const total = unprocessed.length;
     let done = 0;
 
     for (const clip of unprocessed) {
-      const content = clip.extracted_content || clip.my_note || clip.title;
+      const content = clip.extracted_content || clip.saved_note || clip.my_note || clip.title;
       await getStore().processClipAI(clip.id, content);
       done++;
       onProgress?.(done, total);

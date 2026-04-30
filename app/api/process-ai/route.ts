@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 const CATEGORY_TAXONOMY: Record<string, string[]> = {
@@ -59,6 +60,17 @@ async function getOpenAIError(response: Response) {
   };
 }
 
+function getMetadataClient() {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) return null;
+
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceKey,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
 function normalizeTags(tags: unknown): string[] {
   if (!Array.isArray(tags)) return [];
 
@@ -103,13 +115,25 @@ export async function POST(req: NextRequest) {
 
   if (!clipId || !content) return NextResponse.json({ error: 'Missing clipId or content' }, { status: 400 });
 
-  // Verify ownership and load current title/type for title improvement rules.
-  const { data: clip } = await supabase
-    .from('clips')
-    .select('user_id, title, content_type, source_domain, url')
-    .eq('id', clipId)
-    .single();
-  if (!clip || clip.user_id !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  // Verify the clip is saved by this user. URL clips can be shared across users,
+  // so ownership by clips.user_id is no longer a valid access check.
+  const { data: savedClip } = await supabase
+    .from('clip_saves')
+    .select(`
+      clip_id,
+      clips (
+        user_id,
+        title,
+        content_type,
+        source_domain,
+        url
+      )
+    `)
+    .eq('user_id', user.id)
+    .eq('clip_id', clipId)
+    .maybeSingle();
+  const clip = Array.isArray(savedClip?.clips) ? savedClip?.clips[0] : savedClip?.clips;
+  if (!clip) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const currentTitle = String(clip.title || clipTitle || '').trim();
   const shouldImproveTitle = isUploadedFileClip(clip) || isGenericTitle(currentTitle);
 
@@ -231,15 +255,17 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
   if (aiCategory) dbUpdate.category = aiCategory;
   if (aiSubcategory) dbUpdate.subcategory = aiSubcategory;
   if (aiKeyPoints) dbUpdate.key_points = aiKeyPoints;
-  const { error: updateError } = await supabase.from('clips').update(dbUpdate).eq('id', clipId);
+  const metadataClient = getMetadataClient() ?? supabase;
+  const { error: updateError } = await metadataClient.from('clips').update(dbUpdate).eq('id', clipId);
   if (updateError) {
     console.error('Failed to persist AI metadata', updateError);
     return NextResponse.json({ error: 'Failed to persist AI metadata', detail: updateError.message }, { status: 500 });
   }
 
   if (mergedTags.length > 0) {
-    await supabase.from('clip_tags').delete().eq('clip_id', clipId);
-    const { error: tagError } = await supabase.from('clip_tags').insert(mergedTags.map(t => ({ clip_id: clipId, name: t, user_id: user.id })));
+    const tagOwnerId = clip.user_id || user.id;
+    await metadataClient.from('clip_tags').delete().eq('clip_id', clipId);
+    const { error: tagError } = await metadataClient.from('clip_tags').insert(mergedTags.map(t => ({ clip_id: clipId, name: t, user_id: tagOwnerId })));
     if (tagError) {
       console.error('Failed to persist AI tags', tagError);
       return NextResponse.json({ error: 'Failed to persist AI tags', detail: tagError.message }, { status: 500 });

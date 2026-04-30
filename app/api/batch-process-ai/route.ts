@@ -57,11 +57,21 @@ export async function POST(req: NextRequest) {
   const clipIds = requestedClipIds.slice(0, maxItems);
   if (clipIds.length === 0) return NextResponse.json({ error: 'clipIds required' }, { status: 400 });
 
-  const { data: clips, error: clipsError } = await supabase
-    .from('clips')
-    .select('id, title, extracted_content, my_note, summary, user_id')
+  const { data: saves, error: clipsError } = await supabase
+    .from('clip_saves')
+    .select(`
+      my_note,
+      clips (
+        id,
+        title,
+        extracted_content,
+        my_note,
+        summary,
+        user_id
+      )
+    `)
     .eq('user_id', user.id)
-    .in('id', clipIds);
+    .in('clip_id', clipIds);
 
   if (clipsError) return NextResponse.json({ error: clipsError.message }, { status: 500 });
 
@@ -72,7 +82,10 @@ export async function POST(req: NextRequest) {
     .limit(200);
   const existingTags = Array.from(new Set((tagRows ?? []).map(row => row.name).filter(Boolean))).slice(0, 200);
 
-  const found = new Map((clips ?? []).map(clip => [clip.id, clip]));
+  const found = new Map((saves ?? []).flatMap((save: any) => {
+    const clip = Array.isArray(save.clips) ? save.clips[0] : save.clips;
+    return clip ? [[clip.id, { ...clip, saved_note: save.my_note }]] : [];
+  }));
   const results: BatchAiResult[] = [];
 
   for (let index = 0; index < clipIds.length; index++) {
@@ -90,7 +103,7 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    const content = clip.extracted_content || clip.my_note || clip.summary || clip.title || '';
+    const content = clip.extracted_content || clip.saved_note || clip.my_note || clip.summary || clip.title || '';
     if (!content.trim() || content.trim().length <= 10) {
       results.push({ clipId, status: 'skipped', error: 'No content for AI processing' });
       continue;
