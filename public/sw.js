@@ -2,7 +2,6 @@ const CACHE_NAME = 'throwin-cache-v1';
 
 // Assets to cache for basic offline shell
 const urlsToCache = [
-  '/',
   '/manifest.webmanifest',
   '/icons/app-icon-192.png'
 ];

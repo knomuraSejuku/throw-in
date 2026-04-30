@@ -24,6 +24,11 @@ const delaGothicOne = Dela_Gothic_One({
 export const metadata: Metadata = {
   title: 'Throw In',
   description: 'Digital Curator - 気になる情報を保存し、整理し、あとで見返せる個人ライブラリ。',
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: '/icons/app-icon-192.png',
+    apple: '/icons/app-icon-192.png',
+  },
 };
 
 export default function RootLayout({

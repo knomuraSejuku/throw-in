@@ -43,6 +43,8 @@ export async function middleware(request: NextRequest) {
     !demoBypass &&
     !request.nextUrl.pathname.startsWith('/login') &&
     !request.nextUrl.pathname.startsWith('/auth') &&
+    request.nextUrl.pathname !== '/manifest.webmanifest' &&
+    request.nextUrl.pathname !== '/sw.js' &&
     !request.nextUrl.pathname.startsWith('/search') &&
     !request.nextUrl.pathname.startsWith('/view') &&
     !request.nextUrl.pathname.startsWith('/api/search') &&
