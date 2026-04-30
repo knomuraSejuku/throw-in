@@ -896,9 +896,10 @@
     - **確認:** `components/shell/SidebarNav.tsx` 内に `/notifications` / `/insights` / `/changelog` / `/settings` のfooterアンカーが残っていないことを確認
   - **追加ハードニング（2026-04-30）:**
     - **対象:** `/notifications` / `/insights` / `/changelog` / `/settings` の4項目すべて
-    - **対応:** `app-sidebar` / `app-sidebar-footer` / `app-sidebar-footer-item` の専用CSSを追加し、サイドバー本体を18rem、footer領域を16remに `!important` で固定
-    - **対応:** `clip-path: inset(0)` / `contain: layout paint` / `overflow: hidden` を付与し、footerボタンのhover/click判定がサイドバー幅を越えてメインカラムへ漏れないようにした
-    - **意図:** Tailwind classやpositioningの解釈差、hydration中の一時レイアウト、hover領域の横伸びが起きても、4項目の判定領域をサイドバー内に強制的に閉じ込める
+    - **撤回:** `app-sidebar` / `app-sidebar-footer` / `app-sidebar-footer-item` の専用CSSによる強制固定は、実画面で見た目を悪化させたため削除
+    - **原因再判定:** `SidebarNav` のコレクション見出しで `<button>` の中に `<button>` をネストしており、HTML仕様上不正な構造だった。ブラウザのDOM補正により、サイドバー内のhover/click領域が意図せずメインカラムへ漏れる可能性が高い
+    - **対応:** コレクション見出しを「開閉ボタン」と「追加ボタン」の兄弟要素へ分離し、ネストしたbuttonを解消
+    - **対応:** CSSでの押さえ込みではなく、DOM構造の正常化でhover領域がサイドバー内に収まるよう修正
   - ファイル: `components/shell/SidebarNav.tsx`, `components/shell/AppShell.tsx`, `components/shell/BottomNavBar.tsx`, `components/shell/TopNavBar.tsx`
 
 - [x] **K13** グローバルクリップにコメントが反映されない問題の修正

@@ -121,7 +121,7 @@ function SidebarContent() {
   }, [clips]);
 
   return (
-    <aside className="app-sidebar fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-hidden bg-surface-container-lowest border-r border-outline-variant/10">
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-hidden bg-surface-container-lowest border-r border-outline-variant/10">
 
       {/* Fixed header */}
       <div className="flex-shrink-0 px-6 py-5 border-b border-outline-variant/10 bg-surface-container-lowest/80 backdrop-blur-xl">
@@ -158,21 +158,24 @@ function SidebarContent() {
 
         {/* Collections */}
         <div>
-          <button
-            onClick={() => setIsCollectionsOpen(v => !v)}
-            className="flex items-center justify-between w-full px-4 py-2 rounded-xl hover:bg-surface-container transition-colors"
-          >
-            <h3 className="text-[11px] font-bold text-outline uppercase tracking-widest">コレクション</h3>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={e => { e.stopPropagation(); setIsCreatingCollection(true); setIsCollectionsOpen(true); }}
-                className="p-1 text-outline-variant hover:text-primary transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setIsCollectionsOpen(v => !v)}
+              className="flex min-w-0 flex-1 items-center justify-between px-4 py-2 rounded-xl hover:bg-surface-container transition-colors"
+            >
+              <h3 className="text-[11px] font-bold text-outline uppercase tracking-widest">コレクション</h3>
               {isCollectionsOpen ? <ChevronDown className="w-4 h-4 text-outline" /> : <ChevronRight className="w-4 h-4 text-outline" />}
-            </div>
-          </button>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsCreatingCollection(true); setIsCollectionsOpen(true); }}
+              className="shrink-0 p-2 text-outline-variant hover:text-primary transition-colors rounded-xl hover:bg-surface-container"
+              title="コレクションを追加"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
 
           {isCollectionsOpen && (
             <div className="space-y-1 mt-1">
@@ -397,7 +400,7 @@ function SidebarContent() {
         </div>
       </div>
 
-      <div className="app-sidebar-footer absolute inset-x-4 bottom-0 shrink-0 border-t border-outline-variant/10 bg-surface-container-lowest py-4 space-y-1">
+      <div className="absolute inset-x-4 bottom-0 shrink-0 border-t border-outline-variant/10 bg-surface-container-lowest py-4 space-y-1">
         {footerNav.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -406,7 +409,7 @@ function SidebarContent() {
               type="button"
               onClick={() => router.push(item.href)}
               className={clsx(
-                "app-sidebar-footer-item flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors",
+                "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors",
                 isActive
                   ? "bg-primary-container text-on-primary-container"
                   : "text-on-surface-variant hover:bg-surface-container-high"
