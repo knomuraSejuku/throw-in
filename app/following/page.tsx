@@ -131,8 +131,8 @@ export default function FollowingPage() {
             <Users className="w-5 h-5 text-on-secondary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-on-surface">フォロー中</h1>
-            <p className="text-xs text-on-surface-variant">
+            <h1 className="brand-page-title">フォロー中</h1>
+            <p className="brand-page-kicker !text-xs">
               {followCount !== null ? `${followCount}人をフォロー中` : 'フォロー中のユーザーの公開クリップ'}
             </p>
           </div>

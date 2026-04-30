@@ -9,9 +9,14 @@ import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/supabase/client';
 
 const PAGE_TITLES: Record<string, string> = {
-  '/': 'Library',
+  '/': 'ライブラリ',
   '/search': 'グローバルクリップ',
+  '/following': 'フォロー中',
   '/history': '閲覧履歴',
+  '/notifications': '通知',
+  '/insights': 'インサイト',
+  '/changelog': '更新情報',
+  '/bookmarks': 'ブックマーク',
   '/settings': '設定',
   '/collections': 'コレクション',
 };
@@ -19,7 +24,7 @@ const PAGE_TITLES: Record<string, string> = {
 export function TopNavBar() {
   const pathname = usePathname();
   const router = useRouter();
-  const title = PAGE_TITLES[pathname] ?? null;
+  const title = PAGE_TITLES[pathname] ?? '';
   const { user } = useAuthStore();
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<{ displayName: string | null; avatarEmoji: string }>({ displayName: null, avatarEmoji: '🙂' });
@@ -64,21 +69,19 @@ export function TopNavBar() {
   };
 
   return (
-    <header className="fixed top-0 w-full z-30 flex justify-between items-center px-4 md:px-6 py-4 lg:pl-80 bg-surface/86 backdrop-blur-xl border-b border-outline-variant/60">
-      <div className="flex items-center gap-4 lg:hidden">
+    <header className="fixed top-0 w-full z-30 flex h-14 items-center justify-between px-4 md:px-6 lg:pl-80 bg-surface/88 backdrop-blur-xl border-b border-outline-variant/60">
+      <div className="flex min-w-0 items-center gap-3 lg:hidden">
         <Image
           src="/icons/app-icon-192.png"
           alt=""
           width={32}
           height={32}
-          className="h-8 w-8 rounded-lg border border-outline-variant/50 bg-surface-container-lowest object-cover"
+          className="h-7 w-7 rounded-lg border border-outline-variant/50 bg-surface-container-lowest object-cover"
         />
-        <h1 className="text-2xl font-logo font-light tracking-normal text-on-surface">Throw In</h1>
+        <span className="truncate text-sm font-semibold tracking-normal text-on-surface">{title || 'Throw In'}</span>
       </div>
       <div className="hidden lg:flex items-center gap-4">
-        <h2 className="text-xl font-medium tracking-normal text-on-surface">
-          {title ?? <span className="font-logo font-light tracking-normal text-2xl">Throw In</span>}
-        </h2>
+        {title && <span className="text-sm font-semibold tracking-normal text-on-surface-variant">{title}</span>}
       </div>
 
       <div className="flex items-center gap-3">
@@ -97,7 +100,7 @@ export function TopNavBar() {
         <div className="relative" ref={ref}>
           <button
             onClick={() => setOpen(o => !o)}
-            className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-xl border-2 border-surface hover:border-primary/30 transition-colors"
+            className="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center text-lg border-2 border-surface hover:border-primary/30 transition-colors"
             aria-label="ユーザーメニュー"
           >
             {profile.avatarEmoji}

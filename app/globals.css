@@ -128,6 +128,122 @@
 
 /* ── Prose / Article Body ─────────────────────────────────────────── */
 @layer components {
+  .brand-page-title {
+    @apply text-2xl md:text-3xl font-semibold tracking-normal text-on-surface leading-tight;
+  }
+
+  .brand-page-kicker {
+    @apply text-sm text-on-surface-variant leading-relaxed;
+  }
+
+  .brand-section-title {
+    @apply flex items-center gap-2 text-base font-semibold text-on-surface leading-tight;
+  }
+
+  .brand-panel {
+    @apply rounded-3xl border border-outline-variant/15 bg-surface-container-lowest shadow-ambient;
+  }
+
+  .brand-panel-muted {
+    @apply rounded-3xl border border-outline-variant/15 bg-surface-container-low shadow-ambient;
+  }
+
+  .brand-button-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-on-primary shadow-primary transition-all hover:-translate-y-0.5 hover:shadow-card-hover active:translate-y-0 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .brand-button-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-outline-variant/45 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:bg-surface-container-low disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .brand-button-muted {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-transparent bg-surface-container-low px-4 py-2.5 text-sm font-semibold text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .brand-segment {
+    @apply rounded-2xl px-4 py-2 text-sm font-semibold text-on-surface-variant transition-colors hover:bg-surface-container;
+  }
+
+  .brand-segment-active {
+    @apply bg-primary text-on-primary hover:bg-primary;
+  }
+
+  .brand-chip {
+    @apply inline-flex items-center rounded-full bg-surface-container px-2.5 py-1 text-[10px] font-semibold uppercase tracking-normal text-on-surface-variant;
+  }
+
+  .brand-chart-card {
+    @apply rounded-3xl border border-outline-variant/15 bg-surface-container-lowest p-5 md:p-6 shadow-ambient;
+  }
+
+  .brand-chart-title {
+    @apply text-sm font-semibold text-on-surface;
+  }
+
+  .ai-column-body {
+    color: var(--color-on-surface-variant);
+    font-size: 0.95rem;
+    line-height: 1.95;
+  }
+
+  .ai-column-body > :first-child {
+    margin-top: 0;
+  }
+
+  .ai-column-body > :last-child {
+    margin-bottom: 0;
+  }
+
+  .ai-column-body h2,
+  .ai-column-body h3 {
+    color: var(--color-on-surface);
+    font-weight: 700;
+    line-height: 1.45;
+    margin-top: 1.5rem;
+    margin-bottom: 0.7rem;
+  }
+
+  .ai-column-body h2 {
+    font-size: 1.15rem;
+    padding-bottom: 0.45rem;
+    border-bottom: 1px solid var(--color-outline-variant);
+  }
+
+  .ai-column-body h3 {
+    font-size: 1rem;
+  }
+
+  .ai-column-body p {
+    margin-bottom: 1rem;
+  }
+
+  .ai-column-body ul,
+  .ai-column-body ol {
+    margin: 0.75rem 0 1rem 1.25rem;
+  }
+
+  .ai-column-body ul {
+    list-style: disc;
+  }
+
+  .ai-column-body ol {
+    list-style: decimal;
+  }
+
+  .ai-column-body li {
+    margin-bottom: 0.35rem;
+    padding-left: 0.15rem;
+  }
+
+  .ai-column-body li::marker {
+    color: var(--color-primary);
+  }
+
+  .ai-column-body strong {
+    color: var(--color-on-surface);
+    font-weight: 700;
+  }
+
   :is(
     a[href$="/notifications"],
     a[href$="/insights"],

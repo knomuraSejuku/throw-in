@@ -18,7 +18,7 @@ export default function BookmarksPage() {
   return (
     <AppShell>
       <div className="w-full max-w-7xl mx-auto px-4 md:px-8 py-8 md:py-12">
-        <h2 className="text-2xl font-bold text-on-surface mb-6">ブックマーク</h2>
+        <h1 className="brand-page-title mb-6">ブックマーク</h1>
 
         {isLoading ? (
           <div className="w-full py-20 flex flex-col items-center justify-center text-outline">

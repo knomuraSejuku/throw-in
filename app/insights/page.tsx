@@ -37,6 +37,15 @@ const TYPE_LABELS: Record<string, string> = {
   url: '記事', video: '動画', image: '画像', pdf: 'ドキュメント', diary: '日記・メモ',
 };
 
+const chartTooltipStyle = {
+  background: 'var(--color-surface-container-lowest)',
+  border: '1px solid var(--color-outline-variant)',
+  borderRadius: 16,
+  boxShadow: 'var(--shadow-ambient)',
+  color: 'var(--color-on-surface)',
+  fontSize: 12,
+};
+
 function getLast8Weeks(clips: { timestamp: number }[]) {
   const weeks: { label: string; count: number }[] = [];
   const now = Date.now();
@@ -175,28 +184,28 @@ export default function InsightsPage() {
 
         {/* Header */}
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-on-surface">インサイト</h1>
-          <p className="text-sm text-on-surface-variant">保存した情報の傾向と振り返り</p>
+          <h1 className="brand-page-title">インサイト</h1>
+          <p className="brand-page-kicker">保存した情報の傾向と振り返り</p>
         </div>
 
         {/* AI Columns Section */}
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-on-surface flex items-center gap-2">
-            <Newspaper className="w-5 h-5 text-tertiary" />
+          <h2 className="brand-section-title">
+            <Newspaper className="w-5 h-5 text-primary" />
             AIコラム
           </h2>
 
           {/* Generator card */}
-          <div className="bg-surface-container-lowest p-6 rounded-[32px] shadow-ambient space-y-4 max-w-lg">
+          <div className="brand-panel p-5 md:p-6 space-y-4 max-w-lg">
             <div className="flex gap-2 flex-wrap">
               {INSIGHT_TYPES.map(({ key, label }) => (
                 <button
                   key={key}
                   onClick={() => setInsightType(key)}
-                  className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                  className={`${
                     insightType === key
-                      ? 'bg-tertiary text-on-tertiary'
-                      : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high'
+                      ? 'brand-segment brand-segment-active'
+                      : 'brand-segment'
                   }`}
                 >
                   {label}
@@ -209,13 +218,13 @@ export default function InsightsPage() {
                 placeholder="カテゴリ名（例: テクノロジー）"
                 value={insightCategory}
                 onChange={e => setInsightCategory(e.target.value)}
-                className="w-full px-4 py-2 rounded-full text-sm bg-surface-container-low border border-outline-variant/30 outline-none focus:border-tertiary"
+                className="w-full rounded-full border border-outline-variant/45 bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-none transition-colors placeholder:text-outline focus:border-primary"
               />
             )}
             <button
               onClick={handleGenerateInsight}
               disabled={isGeneratingInsight || (insightType === 'category' && !insightCategory.trim())}
-              className="w-full py-3 bg-tertiary text-on-tertiary rounded-full font-bold shadow-lg shadow-tertiary/20 hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
+              className="brand-button-primary w-full"
             >
               {isGeneratingInsight
                 ? <><Loader2 className="w-4 h-4 animate-spin" />生成中...</>
@@ -234,14 +243,14 @@ export default function InsightsPage() {
           ) : (
             <div className="space-y-3 max-w-2xl">
               {insights.map(item => (
-                <div key={item.id} className="bg-surface-container-lowest rounded-[24px] shadow-ambient overflow-hidden">
+                <div key={item.id} className="brand-panel overflow-hidden">
                   <button
                     onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
                     className="w-full flex items-start justify-between gap-3 p-5 text-left hover:bg-surface-container-low transition-colors"
                   >
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-tertiary/10 text-tertiary">
+                        <span className="brand-chip">
                           {INSIGHT_TYPES.find(t => t.key === item.type)?.label ?? item.type}
                         </span>
                         {item.category && (
@@ -258,7 +267,7 @@ export default function InsightsPage() {
                       : <ChevronDown className="w-4 h-4 text-outline flex-shrink-0 mt-1" />}
                   </button>
                   {expandedId === item.id && (
-                    <div className="px-5 pb-6 prose prose-sm max-w-none text-on-surface border-t border-outline-variant/10 pt-4">
+                    <div className="px-5 pb-6 ai-column-body border-t border-outline-variant/10 pt-4">
                       <ReactMarkdown>{item.body}</ReactMarkdown>
                     </div>
                   )}
@@ -276,7 +285,7 @@ export default function InsightsPage() {
             { label: '既読', value: stats.total - stats.unread },
             { label: '未読率', value: stats.total > 0 ? `${Math.round(stats.unread / stats.total * 100)}%` : '—' },
           ].map(({ label, value }) => (
-            <div key={label} className="bg-surface-container-lowest rounded-[24px] p-4 space-y-1 shadow-ambient">
+            <div key={label} className="brand-panel p-4 space-y-1">
               <p className="text-xs text-on-surface-variant">{label}</p>
               <p className="text-2xl font-bold text-on-surface">{value}</p>
             </div>
@@ -285,8 +294,8 @@ export default function InsightsPage() {
 
         {/* 未読/既読 progress */}
         {stats.total > 0 && (
-          <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-ambient space-y-3">
-            <p className="text-sm font-bold text-on-surface">未読 / 既読</p>
+          <div className="brand-chart-card space-y-3">
+            <p className="brand-chart-title">未読 / 既読</p>
             <div className="w-full h-3 bg-surface-container-high rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary rounded-full transition-all"
@@ -302,17 +311,14 @@ export default function InsightsPage() {
 
         {/* 週次推移 */}
         {stats.total > 0 && (
-          <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-ambient space-y-4">
-            <p className="text-sm font-bold text-on-surface">過去8週の保存推移</p>
+          <div className="brand-chart-card space-y-4">
+            <p className="brand-chart-title">過去8週の保存推移</p>
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={stats.weeklyTrend}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-outline-variant)" strokeOpacity={0.3} />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} />
-                <Tooltip
-                  contentStyle={{ background: 'var(--color-surface-container)', border: 'none', borderRadius: 12, fontSize: 12 }}
-                  labelStyle={{ color: 'var(--color-on-surface)' }}
-                />
+                <Tooltip contentStyle={chartTooltipStyle} labelStyle={{ color: 'var(--color-on-surface)' }} />
                 <Line type="monotone" dataKey="count" stroke="var(--color-primary)" strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
@@ -321,16 +327,13 @@ export default function InsightsPage() {
 
         {/* コンテンツタイプ別 */}
         {stats.byType.length > 0 && (
-          <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-ambient space-y-4">
-            <p className="text-sm font-bold text-on-surface">コンテンツタイプ別</p>
+          <div className="brand-chart-card space-y-4">
+            <p className="brand-chart-title">コンテンツタイプ別</p>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={stats.byType} layout="vertical">
                 <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} width={72} />
-                <Tooltip
-                  contentStyle={{ background: 'var(--color-surface-container)', border: 'none', borderRadius: 12, fontSize: 12 }}
-                  labelStyle={{ color: 'var(--color-on-surface)' }}
-                />
+                <Tooltip contentStyle={chartTooltipStyle} labelStyle={{ color: 'var(--color-on-surface)' }} />
                 <Bar dataKey="count" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -339,17 +342,14 @@ export default function InsightsPage() {
 
         {/* カテゴリ別 */}
         {stats.byCategory.length > 0 && (
-          <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-ambient space-y-4">
-            <p className="text-sm font-bold text-on-surface">カテゴリ別</p>
+          <div className="brand-chart-card space-y-4">
+            <p className="brand-chart-title">カテゴリ別</p>
             <ResponsiveContainer width="100%" height={Math.max(140, stats.byCategory.length * 36)}>
               <BarChart data={stats.byCategory} layout="vertical">
                 <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--color-on-surface-variant)' }} width={120} />
-                <Tooltip
-                  contentStyle={{ background: 'var(--color-surface-container)', border: 'none', borderRadius: 12, fontSize: 12 }}
-                  labelStyle={{ color: 'var(--color-on-surface)' }}
-                />
-                <Bar dataKey="count" fill="var(--color-tertiary)" radius={[0, 6, 6, 0]} />
+                <Tooltip contentStyle={chartTooltipStyle} labelStyle={{ color: 'var(--color-on-surface)' }} />
+                <Bar dataKey="count" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -357,15 +357,15 @@ export default function InsightsPage() {
 
         {/* 頻出タグ TOP10 */}
         {stats.topTags.length > 0 && (
-          <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-ambient space-y-4">
-            <p className="text-sm font-bold text-on-surface">頻出タグ TOP{stats.topTags.length}</p>
+          <div className="brand-chart-card space-y-4">
+            <p className="brand-chart-title">頻出タグ TOP{stats.topTags.length}</p>
             <div className="space-y-2">
               {stats.topTags.map(([tag, count], i) => (
                 <div key={tag} className="flex items-center gap-3">
                   <span className="text-xs text-on-surface-variant w-4 text-right">{i + 1}</span>
                   <div className="flex-1 h-6 bg-surface-container-high rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-secondary/70 rounded-full"
+                      className="h-full bg-primary/80 rounded-full"
                       style={{ width: `${Math.round(count / stats.topTags[0][1] * 100)}%` }}
                     />
                   </div>
@@ -379,21 +379,21 @@ export default function InsightsPage() {
 
         {/* AIレポートセクション */}
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-on-surface flex items-center gap-2">
+          <h2 className="brand-section-title">
             <BarChart2 className="w-5 h-5 text-primary" />
             AIレポート
           </h2>
 
-          <div className="bg-surface-container-lowest p-6 rounded-[32px] shadow-ambient space-y-5 max-w-lg">
+          <div className="brand-panel p-5 md:p-6 space-y-5 max-w-lg">
             <div className="flex gap-2">
               {PERIODS.map(({ key, label }) => (
                 <button
                   key={key}
                   onClick={() => { setSelectedPeriod(key); setReport(null); setError(null); }}
-                  className={`flex-1 py-3 text-sm font-bold rounded-2xl transition-colors ${
+                  className={`flex-1 ${
                     selectedPeriod === key
-                      ? 'bg-primary-container text-on-primary-container'
-                      : 'text-on-surface-variant hover:bg-surface-container-low'
+                      ? 'brand-segment brand-segment-active'
+                      : 'brand-segment'
                   }`}
                 >
                   {label}
@@ -403,7 +403,7 @@ export default function InsightsPage() {
             <button
               onClick={handleGenerate}
               disabled={isGenerating}
-              className="w-full py-4 text-white bg-primary rounded-full font-bold shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-60 flex items-center justify-center gap-2"
+              className="brand-button-primary w-full py-4"
             >
               {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin" />生成中...</> : '生成する'}
             </button>
@@ -413,7 +413,7 @@ export default function InsightsPage() {
             <div className="max-w-2xl bg-error/10 text-error p-4 rounded-2xl text-sm">{error}</div>
           )}
           {report && (
-            <div className="max-w-2xl bg-surface-container-lowest p-8 rounded-[32px] shadow-ambient prose prose-sm max-w-none text-on-surface">
+            <div className="max-w-2xl brand-panel p-6 md:p-8 ai-column-body">
               <ReactMarkdown>{report}</ReactMarkdown>
             </div>
           )}

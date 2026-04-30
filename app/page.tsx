@@ -253,9 +253,9 @@ function LibraryContent() {
       )}
       
       {/* Filters / Metadata Header */}
-      <div className="sticky top-[72px] z-20 py-4 bg-background/90 backdrop-blur-md flex flex-wrap items-center justify-between gap-4 mb-4 -mx-4 px-4 md:mx-0 md:px-0">
+      <div className="sticky top-14 z-20 py-4 bg-background/90 backdrop-blur-md flex flex-wrap items-center justify-between gap-4 mb-4 -mx-4 px-4 md:mx-0 md:px-0">
         <div className="flex items-baseline gap-2">
-          <h2 className="text-2xl font-bold text-on-surface">{getPageTitle()}</h2>
+          <h1 className="brand-page-title">{getPageTitle()}</h1>
           <span className="text-xs text-outline/60 tabular-nums font-medium">
             {filteredClips.filter(c => c.isUnread).length}/{filteredClips.length}
           </span>

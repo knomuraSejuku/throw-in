@@ -126,18 +126,18 @@ function SidebarContent() {
     <aside className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-hidden bg-surface-container-lowest border-r border-outline-variant/10">
 
       {/* Fixed header */}
-      <div className="flex-shrink-0 px-6 py-5 border-b border-outline-variant/10 bg-surface-container-lowest/80 backdrop-blur-xl">
+      <div className="flex h-14 flex-shrink-0 items-center px-5 border-b border-outline-variant/10 bg-surface-container-lowest/80 backdrop-blur-xl">
         <Link href="/" className="flex items-center gap-3">
           <Image
             src="/icons/app-icon-192.png"
             alt=""
             width={40}
             height={40}
-            className="h-10 w-10 rounded-xl border border-outline-variant/50 bg-surface-container-lowest object-cover"
+            className="h-8 w-8 rounded-lg border border-outline-variant/50 bg-surface-container-lowest object-cover"
           />
           <div>
-            <h1 className="text-2xl font-logo font-light text-on-surface leading-tight">Throw In</h1>
-            <p className="text-[10px] text-outline">Your clips. Organized by AI.</p>
+            <span className="block text-lg font-logo font-light text-on-surface leading-tight">Throw In</span>
+            <span className="block text-[9px] text-outline leading-none">Your clips. Organized by AI.</span>
           </div>
         </Link>
       </div>

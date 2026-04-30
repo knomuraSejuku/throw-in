@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { AppShell } from '@/components/shell/AppShell';
 
 export const metadata = {
   title: '更新情報 | Throw In',
@@ -59,16 +60,16 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default function ChangelogPage() {
   return (
-    <div className="min-h-screen bg-surface">
-      <div className="w-full max-w-2xl mx-auto px-6 py-12 space-y-8">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors">
+    <AppShell>
+      <div className="w-full max-w-2xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-8">
+        <Link href="/" className="brand-button-secondary">
           <ArrowLeft className="w-4 h-4" />
-          ホームに戻る
+          ライブラリへ
         </Link>
 
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-on-surface">更新情報</h1>
-          <p className="text-sm text-on-surface-variant">Throw In の新機能・改善・バグ修正の記録</p>
+          <h1 className="brand-page-title">更新情報</h1>
+          <p className="brand-page-kicker">Throw In の新機能・改善・バグ修正の記録</p>
         </div>
 
         <div className="space-y-10">
@@ -92,6 +93,6 @@ export default function ChangelogPage() {
           ))}
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

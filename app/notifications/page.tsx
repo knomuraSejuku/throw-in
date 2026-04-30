@@ -66,7 +66,7 @@ export default function NotificationsPage() {
     <AppShell>
       <div className="w-full max-w-2xl mx-auto px-4 md:px-6 py-8 space-y-6">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-on-surface flex items-center gap-2">
+          <h1 className="brand-page-title flex items-center gap-2">
             <Bell className="w-7 h-7 text-primary" />
             通知
           </h1>

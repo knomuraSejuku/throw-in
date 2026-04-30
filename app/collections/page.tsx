@@ -17,7 +17,7 @@ export default function CollectionsPage() {
     <AppShell>
       <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-8 md:py-12">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-on-surface">コレクション</h1>
+          <h1 className="brand-page-title">コレクション</h1>
           {collections.length > 0 && (
             <button
               onClick={() => setShowDialog(true)}
