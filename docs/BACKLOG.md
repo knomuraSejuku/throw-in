@@ -551,7 +551,7 @@
     - `GET/POST /api/bot/ingest-trending` を追加し、`TRENDING_BOT_SECRET` / `CRON_SECRET` で保護
     - `TRENDING_BOT_USER_ID` の既存ユーザーとして通常クリップを保存し、`is_global_search=true` で公開
     - URL重複チェック、取得スコア/取得元メタ情報、監査ログを追加
-    - `vercel.json` に6時間ごとのVercel Cronを追加
+    - `vercel.json` にHobbyプラン対応の日次Vercel Cronを追加
     - `.env.example` / README / `docs/tech-spec.md` に必要環境変数を追記
   - **残タスク:**
     - Vercelに `TRENDING_BOT_SECRET` / `TRENDING_BOT_USER_ID` を設定し、Bot用ユーザーを作成
