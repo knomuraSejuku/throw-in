@@ -40,6 +40,13 @@ function isGenericTitle(title: string): boolean {
   const normalized = title.trim().toLowerCase();
   if (!normalized) return true;
   if (GENERIC_CLIP_TITLES.has(normalized)) return true;
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return true;
+  } catch {
+    // Not a URL.
+  }
+  if (/^(www\.)?[\w-]+(\.[\w-]+)+(\/.*)?$/i.test(normalized)) return true;
   if (/^x\s+(post|article)(\s*[:\-–—]\s*)?$/i.test(title)) return true;
   if (/^twitter\s+(post|article)(\s*[:\-–—]\s*)?$/i.test(title)) return true;
   if (/^image\.(jpe?g|png|webp|gif|heic)$/i.test(title)) return true;
@@ -222,7 +229,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
 
 タイトル生成ルール:
 - generated_titleには、一覧で一目で内容が分かる短いタイトルを必ず返す
-- ファイル名、"X Post"、"X Article"、"Twitter Post"、"無題の記事" のような汎用名をそのまま使わない
+- URL、ドメイン名、ファイル名、"X Post"、"X Article"、"Twitter Post"、"無題の記事" のような汎用名をそのまま使わない
 - 20〜45文字程度を目安に、主題・固有名詞・資料種別が分かる自然なタイトルにする
 - クリックを煽る表現や説明文ではなく、保存物の名前として使える表現にする
 
