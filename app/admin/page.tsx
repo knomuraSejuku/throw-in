@@ -14,6 +14,7 @@ type Plan = {
   yearly_price_yen: number;
   weekly_ai_limit: number;
   is_active: boolean;
+  is_visible: boolean;
   sort_order: number;
 };
 
@@ -42,6 +43,7 @@ const blankPlan: Omit<Plan, 'id'> = {
   yearly_price_yen: 0,
   weekly_ai_limit: 0,
   is_active: true,
+  is_visible: true,
   sort_order: 100,
 };
 
@@ -203,7 +205,9 @@ export default function AdminPage() {
                   <button key={plan.id} onClick={() => startEditPlan(plan)} className="rounded-3xl border border-outline-variant/20 bg-surface-container-low p-4 text-left hover:bg-surface-container transition-colors">
                     <div className="flex items-center justify-between">
                       <p className="font-bold text-on-surface">{plan.name}</p>
-                      <span className="text-[10px] text-on-surface-variant">{plan.is_active ? '有効' : '停止'}</span>
+                      <span className="text-[10px] text-on-surface-variant">
+                        {plan.is_active ? '有効' : '停止'} / {plan.is_visible ? '表示' : '非表示'}
+                      </span>
                     </div>
                     <p className="mt-1 text-xs text-on-surface-variant">{plan.description}</p>
                     <p className="mt-3 text-sm font-bold text-on-surface">週 {plan.weekly_ai_limit} AI</p>
@@ -251,6 +255,10 @@ export default function AdminPage() {
                 <label className="flex items-center gap-2 text-sm font-semibold text-on-surface">
                   <input type="checkbox" checked={Boolean((draft as any).is_active)} onChange={e => setDraft(d => ({ ...d, is_active: e.target.checked }))} />
                   このプランを有効にする
+                </label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+                  <input type="checkbox" checked={Boolean((draft as any).is_visible ?? true)} onChange={e => setDraft(d => ({ ...d, is_visible: e.target.checked }))} />
+                  ユーザーのプラン選択画面に表示する
                 </label>
                 <button onClick={savePlan} disabled={isSaving} className="brand-button-primary">
                   {isSaving ? '保存中...' : '保存'}

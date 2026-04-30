@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
     yearly_price_yen: Number(body?.yearly_price_yen ?? 0),
     weekly_ai_limit: Number(body?.weekly_ai_limit ?? 0),
     is_active: body?.is_active !== false,
+    is_visible: body?.is_visible !== false,
     sort_order: Number(body?.sort_order ?? 100),
   };
 
@@ -58,6 +59,7 @@ export async function PATCH(req: NextRequest) {
     if (key in (body ?? {})) updates[key] = Number(body[key] ?? 0);
   }
   if ('is_active' in (body ?? {})) updates.is_active = Boolean(body.is_active);
+  if ('is_visible' in (body ?? {})) updates.is_visible = Boolean(body.is_visible);
 
   const { data, error } = await admin.service!
     .from('billing_plans')
