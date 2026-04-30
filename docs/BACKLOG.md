@@ -1421,8 +1421,10 @@
     - `app/add/page.tsx` にCSVタブを追加
     - CSV/テキスト全体からURLを抽出し、最大200件を `POST /api/batch-extract` へ送信
     - `/api/batch-extract` で認証、URL正規化、重複URLスキップ、抽出リトライ、DB保存を実行
-    - 保存成功分は既存の `processClipAI` でAI整理を起動
-  - ファイル: `app/add/page.tsx`, `app/api/batch-extract/route.ts`
+    - 10件ずつチャンク送信して保存進捗を画面表示
+    - 保存成功分は `/api/batch-process-ai` で5件ずつAI整理し、AI整理進捗も画面表示
+    - `x.com` / `twitter.com`、`www.` / `m.`、末尾スラッシュ、クエリ付きURLの重複判定を正規化
+  - ファイル: `app/add/page.tsx`, `app/api/batch-extract/route.ts`, `app/api/batch-process-ai/route.ts`
 
 ### Xブックマーク一括取り込み（E3）
 - [~] 834件のMarkdownファイルを一括インポート
@@ -1446,10 +1448,12 @@
     - `/api/import-x-bookmarks` を追加し、`.md` と `.zip` 内Markdownをサーバー側で解析
     - `Title` / `URL` / `Date` / `Content` 形式を優先し、なければ本文からX投稿URL・ISO8601日付・画像URLを抽出
     - 本文はAI要約済みの `summary` ではなく `extracted_content` に保存し、既存のAI再整理導線に乗るようにした
-    - 重複URLはスキップし、保存成功分は既存の `processClipAI` でAI整理を起動
+    - Markdownは50件ずつ、ZIPは1ファイルずつチャンク送信して保存進捗を画面表示
+    - 重複URLは正規化してスキップし、保存成功分は `/api/batch-process-ai` で5件ずつAI整理する
+    - AI整理進捗も画面表示
   - **残タスク:**
     - 実データ834件での取り込み成功率・重複処理は未検証
-  - ファイル: `app/settings/page.tsx`, `app/api/import-x-bookmarks/route.ts`
+  - ファイル: `app/settings/page.tsx`, `app/api/import-x-bookmarks/route.ts`, `app/api/batch-process-ai/route.ts`
 
 ---
 

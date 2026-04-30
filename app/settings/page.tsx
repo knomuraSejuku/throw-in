@@ -14,6 +14,12 @@ import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import clsx from 'clsx';
 
+const chunkArray = <T,>(items: T[], size: number): T[][] => {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+};
+
 export default function SettingsPage() {
   const { user } = useAuthStore();
   const supabase = createClient();
@@ -36,6 +42,7 @@ export default function SettingsPage() {
   const xImportRef = useRef<HTMLInputElement>(null);
   const [xImportFiles, setXImportFiles] = useState<File[]>([]);
   const [xImportProgress, setXImportProgress] = useState<{ done: number; total: number } | null>(null);
+  const [xImportAiProgress, setXImportAiProgress] = useState<{ done: number; total: number } | null>(null);
   const [xImportResults, setXImportResults] = useState<{ ok: number; skipped: number; fail: number } | null>(null);
   const [isXImporting, setIsXImporting] = useState(false);
 
@@ -153,45 +160,72 @@ export default function SettingsPage() {
     setXImportFiles(files);
     setXImportResults(null);
     setXImportProgress(null);
+    setXImportAiProgress(null);
   };
 
   const handleXImport = async () => {
     if (xImportFiles.length === 0 || !user) return;
     setIsXImporting(true);
     setXImportProgress({ done: 0, total: xImportFiles.length });
+    setXImportAiProgress(null);
 
     try {
-      const form = new FormData();
-      xImportFiles.forEach(file => form.append('files', file));
-
-      const res = await fetch('/api/import-x-bookmarks', {
-        method: 'POST',
-        body: form,
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error || `インポートに失敗しました (${res.status})`);
-
-      const results = (data?.results ?? []) as Array<{
+      const allResults: Array<{
         status: 'created' | 'skipped' | 'failed';
         clipId?: string;
         body?: string;
-      }>;
+      }> = [];
+
+      let uploaded = 0;
+      const fileChunks = xImportFiles.some(file => file.name.toLowerCase().endsWith('.zip'))
+        ? xImportFiles.map(file => [file])
+        : chunkArray(xImportFiles, 50);
+
+      for (const files of fileChunks) {
+        const form = new FormData();
+        files.forEach(file => form.append('files', file));
+
+        const res = await fetch('/api/import-x-bookmarks', {
+          method: 'POST',
+          body: form,
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.error || `インポートに失敗しました (${res.status})`);
+        allResults.push(...((data?.results ?? []) as typeof allResults));
+        uploaded += files.length;
+        setXImportProgress({ done: Math.min(uploaded, xImportFiles.length), total: xImportFiles.length });
+        setXImportResults({
+          ok: allResults.filter(result => result.status === 'created').length,
+          skipped: allResults.filter(result => result.status === 'skipped').length,
+          fail: allResults.filter(result => result.status === 'failed').length,
+        });
+      }
 
       await useClipStore.getState().fetchClips();
       setXImportResults({
-        ok: data?.created ?? results.filter(result => result.status === 'created').length,
-        skipped: data?.skipped ?? results.filter(result => result.status === 'skipped').length,
-        fail: data?.failed ?? results.filter(result => result.status === 'failed').length,
+        ok: allResults.filter(result => result.status === 'created').length,
+        skipped: allResults.filter(result => result.status === 'skipped').length,
+        fail: allResults.filter(result => result.status === 'failed').length,
       });
 
       let done = 0;
-      const aiTargets = results.filter(result => result.status === 'created' && result.clipId && result.body && result.body.trim().length > 10);
-      setXImportProgress({ done, total: aiTargets.length || xImportFiles.length });
-      for (const result of aiTargets) {
-        await useClipStore.getState().processClipAI(result.clipId!, result.body!);
-        done++;
-        setXImportProgress({ done, total: aiTargets.length });
+      const aiTargets = allResults
+        .filter(result => result.status === 'created' && result.clipId)
+        .map(result => result.clipId!);
+      if (aiTargets.length > 0) {
+        setXImportAiProgress({ done, total: aiTargets.length });
+        for (const chunk of chunkArray(aiTargets, 5)) {
+          const res = await fetch('/api/batch-process-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clipIds: chunk }),
+          });
+          if (!res.ok) console.warn('X import AI batch failed', await res.text().catch(() => ''));
+          done += chunk.length;
+          setXImportAiProgress({ done: Math.min(done, aiTargets.length), total: aiTargets.length });
+        }
       }
+      await useClipStore.getState().fetchClips();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'インポートに失敗しました。');
     } finally {
@@ -479,6 +513,17 @@ export default function SettingsPage() {
                   />
                 </div>
                 <p className="text-xs text-on-surface-variant">{xImportProgress.done} / {xImportProgress.total}</p>
+              </div>
+            )}
+            {xImportAiProgress && (
+              <div className="space-y-1">
+                <div className="h-1.5 bg-outline-variant/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-secondary rounded-full transition-all"
+                    style={{ width: `${(xImportAiProgress.done / xImportAiProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-on-surface-variant">AI整理 {xImportAiProgress.done} / {xImportAiProgress.total}</p>
               </div>
             )}
             {xImportResults && (

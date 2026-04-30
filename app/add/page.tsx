@@ -47,6 +47,12 @@ const readApiError = async (response: Response): Promise<string> => {
   return response.statusText || `HTTP ${response.status}`;
 };
 
+const chunkArray = <T,>(items: T[], size: number): T[][] => {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+};
+
 function AddClipForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -89,6 +95,7 @@ function AddClipForm() {
   const csvFileInputRef = useRef<HTMLInputElement>(null);
   const [csvUrls, setCsvUrls] = useState<string[]>([]);
   const [csvProgress, setCsvProgress] = useState<{ done: number; total: number } | null>(null);
+  const [csvAiProgress, setCsvAiProgress] = useState<{ done: number; total: number } | null>(null);
   const [csvResults, setCsvResults] = useState<{ url: string; success: boolean; error?: string }[]>([]);
 
   const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,6 +109,7 @@ function AddClipForm() {
       setCsvUrls(urls);
       setCsvResults([]);
       setCsvProgress(null);
+      setCsvAiProgress(null);
     };
     reader.readAsText(f);
   };
@@ -110,44 +118,65 @@ function AddClipForm() {
     if (csvUrls.length === 0) return;
     setIsSaving(true);
     setErrorMsg('');
+    setCsvResults([]);
     setCsvProgress({ done: 0, total: csvUrls.length });
+    setCsvAiProgress(null);
 
     try {
-      const res = await fetch('/api/batch-extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls: csvUrls }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(data?.error || `一括保存に失敗しました (${res.status})`);
-      }
-
-      const batchResults = (data?.results ?? []) as Array<{
+      const allResults: Array<{
         url: string;
         status: 'created' | 'skipped' | 'failed';
         clipId?: string;
-        title?: string;
-        body?: string | null;
         error?: string;
         reason?: string;
-      }>;
+      }> = [];
 
-      setCsvResults(batchResults.map(result => ({
-        url: result.url,
-        success: result.status !== 'failed',
-        error: result.status === 'skipped' ? '重複のためスキップ' : result.error,
-      })));
-      setCsvProgress({ done: batchResults.length, total: csvUrls.length });
+      for (const chunk of chunkArray(csvUrls, 10)) {
+        const res = await fetch('/api/batch-extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: chunk }),
+        });
+
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          throw new Error(data?.error || `一括保存に失敗しました (${res.status})`);
+        }
+
+        const chunkResults = (data?.results ?? []) as typeof allResults;
+        allResults.push(...chunkResults);
+        setCsvResults(allResults.map(result => ({
+          url: result.url,
+          success: result.status !== 'failed',
+          error: result.status === 'skipped' ? '重複のためスキップ' : result.error,
+        })));
+        setCsvProgress({ done: Math.min(allResults.length, csvUrls.length), total: csvUrls.length });
+      }
 
       await useClipStore.getState().fetchClips();
 
-      for (const result of batchResults) {
-        if (result.status === 'created' && result.clipId && result.body && result.body.trim().length > 10) {
-          useClipStore.getState().processClipAI(result.clipId, result.body);
+      const aiTargets = allResults
+        .filter(result => result.status === 'created' && result.clipId)
+        .map(result => result.clipId!);
+
+      if (aiTargets.length > 0) {
+        let done = 0;
+        setCsvAiProgress({ done, total: aiTargets.length });
+        for (const chunk of chunkArray(aiTargets, 5)) {
+          const res = await fetch('/api/batch-process-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clipIds: chunk }),
+          });
+          if (!res.ok) {
+            console.warn('Batch AI processing failed', await readApiError(res));
+          }
+          done += chunk.length;
+          setCsvAiProgress({ done: Math.min(done, aiTargets.length), total: aiTargets.length });
         }
       }
+
+      await useClipStore.getState().fetchClips();
     } catch (error) {
       setErrorMsg(error instanceof Error ? error.message : '一括保存に失敗しました。');
     } finally {
@@ -611,6 +640,17 @@ function AddClipForm() {
                             />
                           </div>
                           <p className="text-xs text-on-surface-variant mt-1">{csvProgress.done} / {csvProgress.total} 完了</p>
+                        </div>
+                      )}
+                      {csvAiProgress && (
+                        <div className="pt-2">
+                          <div className="h-1.5 bg-outline-variant/20 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-secondary rounded-full transition-all"
+                              style={{ width: `${(csvAiProgress.done / csvAiProgress.total) * 100}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-on-surface-variant mt-1">AI整理 {csvAiProgress.done} / {csvAiProgress.total}</p>
                         </div>
                       )}
                     </div>

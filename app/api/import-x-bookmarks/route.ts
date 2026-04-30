@@ -115,6 +115,12 @@ function extractMarkdownFromZip(buffer: Buffer): MarkdownFile[] {
   return files;
 }
 
+function normalizeXUrl(rawUrl: string): string {
+  const parsed = new URL(rawUrl.trim());
+  const host = parsed.hostname.replace(/^(www\.|m\.)/, '').replace(/^twitter\.com$/, 'x.com');
+  return `https://${host}${parsed.pathname}`.replace(/\/$/, '');
+}
+
 function parseMarkdown(file: MarkdownFile, userId: string): ImportRow | null {
   const text = file.text.trim();
   if (!text) return null;
@@ -129,11 +135,18 @@ function parseMarkdown(file: MarkdownFile, userId: string): ImportRow | null {
   const firstContentLine = content.split(/\r?\n/).map(line => line.trim()).find(Boolean);
   const title = field('Title') || lines[0]?.replace(/^#+\s*/, '').trim() || firstContentLine || file.name.replace(/\.md$/i, '');
   const urlMatch = text.match(/https?:\/\/(?:x\.com|twitter\.com)\/\w+\/status\/\d+/);
-  const url = field('URL') || (urlMatch ? urlMatch[0] : '');
+  const rawUrl = field('URL') || (urlMatch ? urlMatch[0] : '');
   const createdAt = field('Date') || text.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/)?.[0] || '';
   const imgMatch = text.match(/!\[.*?\]\((https?:\/\/[^)]+)\)/);
 
-  if (!url) return null;
+  if (!rawUrl) return null;
+
+  let url: string;
+  try {
+    url = normalizeXUrl(rawUrl);
+  } catch {
+    return null;
+  }
 
   return {
     user_id: userId,
