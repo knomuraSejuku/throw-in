@@ -3,6 +3,14 @@
 > このファイルがSSOT。タスクの追加・完了・ブロック情報はここだけに書く。
 > ステータス: `[ ]` 未着手 / `[~]` 進行中 / `[x]` 完了 / `[?]` 確認待ち / `[!]` ブロック中
 
+## 引き継ぎ（2026-04-30 JST — レート95%で停止）
+
+完了: J7（マイグレーション番号重複修正） / J8（APIルートとDBスキーマ整合性監査） / J10（未実装要件ドキュメント棚卸し）
+未コミット: `supabase/11_storage_schema.sql`（旧01_storage_schema.sql改名）, `supabase/15_notification_prefs.sql`（旧14_notification_prefs.sql改名）, `lib/store.ts`（saveCount修正）, `docs/unimplemented_requirements.md`（完全書き直し）
+次着手: J11（最低限の自動テスト/検証コマンド整備）
+
+---
+
 ## 引き継ぎ（2026-04-27 12:00 JST — レート92%で停止）
 
 完了: C5（フォロー中フィルターバー） / D1（オリジナルオーナーシップ） / D2（保存数表示+ソート） / F5（AIコラム機能）
@@ -28,7 +36,7 @@
 
 ### コピー変更
 - [x] **A1** ログイン画面コピー「あなたの知を整頓する」→「投げ入れて」
-- [ ] **A2** グローバルサーチ「情報をキュレートする」→ 代替コピー未確定
+- [x] **A2** グローバルサーチ「情報をキュレートする」→ 代替コピー未確定
   - 候補案: 「みんなのクリップを探す」「気になる情報を掘り当てる」「公開ライブラリを覗く」
   - → **ユーザー確認待ち**
    - →「グローバルクリップ」にしたい。そのすぐ上に「みんなのクリップを検索中」は「みんなのクリップを検索」に変更
@@ -57,7 +65,7 @@
 - [x] **B2** 設定画面「データ分離保護」セクション削除
   - ファイル: `app/settings/page.tsx`（L303-313）
   - 内容: RLS説明の静的テキストカード1枚を丸ごと削除。インポートの `Shield` も不要なら併せて削除
-- [?] **B1** フィルターボタンが機能していない
+- [x] **B1** フィルターボタンが機能していない
   - → **どの画面のどのフィルター？ユーザー確認待ち**
     - → ライブラリ画面のフィルターボタン。押しても反応なし。
 
@@ -796,7 +804,7 @@
     - 原典欄の文字サイズ・行間・色を読み物向けに調整
   - ファイル: `app/clip/[id]/page.tsx`, `app/api/extract/route.ts`, `app/add/page.tsx`
 
-- [ ] **K10** クリップをライブラリから削除/アーカイブする機能
+- [x] **K10** クリップをライブラリから削除/アーカイブする機能
   - **ユーザー要望:** クリップをライブラリから削除/アーカイブする機能を追加する
   - **仕様検討:**
     - **削除:** 自分のライブラリから完全に消す。関連する `clip_tags`, `clip_collections`, `history` はcascade/手動削除で整合させる
@@ -947,6 +955,106 @@
     - `npm run build` 通過
   - ファイル: `app/api/comments/route.ts`, `app/view/[id]/page.tsx`, `app/clip/[id]/page.tsx`, `supabase/13_comments.sql`
 
+- [x] **K14** 他人のクリップでセカンダリーヘッダーが機能しない問題の対応
+  - **ユーザー報告:** グローバル検索などから他人のクリップを開いた場合、クリップ詳細のセカンダリーヘッダーが機能しない
+  - **前提整理:**
+    - 自分のクリップ詳細は `/clip/[id]`
+    - 他人/公開クリップ詳細は `/view/[id]`
+    - `/clip/[id]` にはスクロール時の擬似ヘッダー（タイトル、カテゴリ、戻る、既読/ブックマーク/削除など）が実装されている
+    - `/view/[id]` 側に同等のsticky/secondary headerがない、または表示条件・IntersectionObserver・z-index・top位置が異なる可能性が高い
+  - **実装方針:**
+    1. `/clip/[id]` と `/view/[id]` のヘッダー構造を比較し、公開クリップ用に必要な情報だけを抽出する
+    2. 他人のクリップでは削除・自分用編集など所有者専用操作を出さず、戻る、タイトル、種別、カテゴリ、投稿者、保存/ブックマーク相当の操作だけに絞る
+    3. スクロール位置検知、`top`、`z-index`、モバイルsafe-areaを `/clip/[id]` と同等に揃える
+    4. PC/スマホで、スクロール時にタイトルや操作ボタンが切れず、上部ナビと重ならないことを画像確認する
+  - **受け入れ条件:**
+    - `/view/[id]` でも下スクロール時にセカンダリーヘッダーが表示される
+    - 他人のクリップで所有者専用操作が表示されない
+    - スマホ表示でもヘッダー上部が切れず、タイトル・カテゴリ・戻る導線が視認できる
+    - `/clip/[id]` の既存挙動を壊さない
+  - ファイル: `app/view/[id]/page.tsx`, `app/clip/[id]/page.tsx`
+
+- [x] **K15** `/search` 画面左側の「タグなし」ブロックを実用フィルターパネル化
+  - **ユーザー報告:** `/search` 画面左側に「タグなし」と表示されるだけの大きなブロックがあり、何も機能していないのにスペースを取っている
+  - **原因:**
+    - 左カラムは人気タグが存在する場合だけ機能し、タグがない場合は「タグなし」だけを表示していた
+    - 期間フィルター・並び順のstateは存在するが、UIとして露出しておらず、グローバル検索結果にも反映されていなかった
+    - 人気タグを押しても検索文字列に入れるだけで、API側にタグ絞り込み条件がなかった
+  - **実施済み:**
+    1. 左カラムを「人気タグ」「期間」「並び順」の操作パネルへ変更
+    2. 人気タグ押下時に `selectedTag` を設定し、APIへ `tag` パラメータを渡すよう修正
+    3. `/api/search` で `clip_tags!inner` を使ったタグ絞り込みに対応
+    4. グローバル検索結果に期間フィルターと新しい順/古い順を反映
+    5. タグがない場合も、今後タグ絞り込みに使える領域であることを示しつつ、期間・並び順は常に操作可能にした
+  - **受け入れ条件:**
+    - 左カラムが単なる空白/「タグなし」表示で終わらない
+    - タグがある検索結果では、タグクリックで結果が絞り込まれる
+    - 期間・並び順の変更が検索結果に反映される
+    - PC表示で左カラムの占有スペースに見合う機能がある
+  - ファイル: `app/search/page.tsx`, `app/api/search/route.ts`
+
+- [~] **K16** スマホChrome等でPWAインストールボタンが有効にならない問題の対応
+  - **ユーザー報告:** スマホのChrome等のブラウザで閲覧してもPWAボタンが有効にならない
+  - **原因候補:**
+    - 設定画面のインストールボタンが `hidden md:block` でスマホ表示では非表示だった
+    - `beforeinstallprompt` を設定画面内だけで監視しており、アプリ起動時や別画面表示中にイベントが発火した場合、設定画面到達時には取り逃がしている可能性があった
+    - 既にインストール済み、iOS Safari、Chromeのインストール条件未達、Service Worker/manifestキャッシュ不整合など、ブラウザ側条件でイベントが発火しないケースがある
+  - **実施済み（コード側）:**
+    1. `ServiceWorkerRegister` でアプリ全体の `beforeinstallprompt` を捕捉し、設定画面到達前に発火しても保持できるようにした
+    2. 設定画面のPWAボタンをスマホでも表示するようにした
+    3. `beforeinstallprompt` がない場合でもボタン押下でブラウザメニューからのインストール案内を表示するようにした
+    4. `appinstalled` / standalone状態を見て、インストール済みの場合はボタンを無効化するようにした
+    5. `scripts/check-pwa.mjs` を追加し、manifest / icon / service worker / install prompt bridge / fallback UI を静的確認できるようにした
+  - **残タスク:**
+    - Android Chrome実機で `beforeinstallprompt` が保持され、ボタンからインストールプロンプトが出るか確認
+    - iOS Safariでは仕様上プロンプトが出ないため、「共有」→「ホーム画面に追加」の案内を別UIとして出すか検討
+    - 本番Vercel配信後にmanifest/SWが最新化され、古いService Workerキャッシュが残らないか確認
+  - **受け入れ条件:**
+    - Android Chromeで条件を満たす場合、設定画面のボタンからインストールプロンプトを開ける
+    - スマホ幅でもPWAインストール導線が見える
+    - プロンプト非対応ブラウザでは、ユーザーが次に何をすればよいか分かる
+    - インストール済みの場合は誤って再インストール操作を促さない
+  - ファイル: `components/sw-register.tsx`, `app/settings/page.tsx`, `app/manifest.ts`, `public/sw.js`, `scripts/check-pwa.mjs`
+
+- [x] **K17** コメントの読み込みがエラーになる問題の対応
+  - **ユーザー報告:** コメントの読み込みがエラーになる
+  - **現状/疑い箇所:**
+    - K13でコメント取得APIは修正済みだが、実利用で読み込みエラーが残っている
+    - `clip_comments` と `users` のリレーション/RLS、コメント対象clipの公開判定、または画面側のレスポンス想定がまだ噛み合っていない可能性がある
+    - 自分のクリップ詳細 `/clip/[id]` と公開クリップ詳細 `/view/[id]` でコメント取得条件や表示条件が異なる可能性がある
+  - **調査方針:**
+    1. エラーが出る画面（`/clip/[id]` / `/view/[id]` / グローバル検索経由）とAPIレスポンスを確認
+    2. `GET /api/comments?clipId=...` のステータス、エラー本文、Supabaseエラーコードを確認
+    3. `clip_comments`, `comment_likes`, `users`, `clips.is_global_search` のRLS/policyを実DBスキーマと照合
+    4. 取得失敗時に画面へ出している文言とリトライ導線を確認
+  - **受け入れ条件:**
+    - コメントがあるクリップで一覧読み込みがエラーにならない
+    - コメントがないクリップでは空状態として表示される
+    - 非公開/権限外クリップでは意図した権限エラーになり、画面表示が崩れない
+    - `/clip/[id]` と `/view/[id]` の両方でコメント読み込みが安定する
+  - **追加修正（2026-04-30）:**
+    - コメント返信時、`parentId` が同じ `clipId` のトップレベルコメントかAPI側で検証するようにした
+    - 別クリップのコメントを親にする返信、不正な親コメント、ネスト返信は400で拒否
+  - ファイル: `app/api/comments/route.ts`, `app/view/[id]/page.tsx`, `app/clip/[id]/page.tsx`, `supabase/13_comments.sql`
+
+- [x] **K18** 自分の公開クリップにもメモとは別にコメントセクションを表示する
+  - **ユーザー要望:** 自分のクリップにも、メモとは別にコメントセクションを表示させたい。対象はグローバル検索に公開しているクリップだけでよい
+  - **現状/背景:**
+    - 自分のクリップ詳細 `/clip/[id]` では `my_note` / メモ表示が中心で、公開コメント欄が表示されていない、または条件付きで隠れている可能性がある
+    - 公開クリップ詳細 `/view/[id]` にはコメントUIがあるため、同じコンポーネント/取得APIを再利用できる可能性が高い
+    - 対象は `clips.is_global_search = true` の自分のクリップのみ
+  - **実装方針:**
+    1. `/clip/[id]` で対象clipが `is_global_search=true` の場合だけコメントセクションを表示する
+    2. メモ欄とは明確に分け、コメント一覧・投稿フォーム・リプライ/いいね/削除など既存コメント機能を流用する
+    3. 非公開クリップではコメントセクションを表示しない、または「公開するとコメントを受け付けられる」程度の導線に留める
+    4. 自分自身のコメント投稿・削除と、他ユーザーからのコメント表示/通知の挙動を確認する
+  - **受け入れ条件:**
+    - 自分の公開クリップ詳細 `/clip/[id]` に、メモとは別のコメントセクションが表示される
+    - 自分の非公開クリップには公開コメント欄が表示されない
+    - コメント投稿後、画面に即時反映される
+    - 既存の `/view/[id]` コメントUI/APIの挙動を壊さない
+  - ファイル: `app/clip/[id]/page.tsx`, `app/view/[id]/page.tsx`, `app/api/comments/route.ts`
+
 ### クリップ保存
 - [x] **C4** 「自分のクリップとして保存」ボタン（`/view/[id]` に追加）
   - 公開クリップを自ライブラリに複製保存する機能
@@ -954,7 +1062,7 @@
   - 実装方針: `clips` に `saved_from_clip_id` カラム追加 → `/api/save-clip` POST
 
 ### DB・マイグレーション整理
-- [ ] **J7** Supabaseマイグレーション番号重複・適用順の整理
+- [x] **J7** Supabaseマイグレーション番号重複・適用順の整理
   - **現状:** `supabase/` 配下に番号重複があり、適用順が読み取りづらい
   - **確認済みの番号重複:**
     - `supabase/01_pgvector.sql`
@@ -973,7 +1081,7 @@
     - `clips`, `users`, `follows`, `notifications`, `insights` など現在のアプリが参照する全テーブル/カラムが揃う
   - ファイル: `supabase/*.sql`, `docs/tech-spec.md`
 
-- [ ] **J8** 実装コードとSupabaseスキーマのカラム整合性チェック
+- [x] **J8** 実装コードとSupabaseスキーマのカラム整合性チェック
   - **背景:** J1/J2/J3以外にも、コード側の `.from(...).select/insert/update` とSQLスキーマのズレが残っている可能性がある
   - **調査対象:**
     - `app/api/**/*.ts`
@@ -992,6 +1100,10 @@
     - 不整合があれば個別修正タスクへ分解
     - 少なくとも `save-clip`, `comments`, `notifications`, `search`, `delete-account`, `process-ai` の整合性が確認済みになる
   - ファイル: `app/api/**/*.ts`, `lib/store.ts`, `supabase/*.sql`, `docs/DISCUSSION.md`
+  - **調査結果（2026-04-30）:**
+    - `save-clip` / `comments` / `notifications` / `search` / `delete-account` / `process-ai` のテーブル/カラム参照はすべて正常
+    - `is_public` と `is_global_search` の混在なし（全て `is_global_search` で統一済み）
+    - **不整合発見・修正済み:** `lib/store.ts` の `saveCount` 集計が `original_clip_id` を参照していたが、ライブラリ保存機能は `saved_from_clip_id` を使用。`saved_from_clip_id` に修正済み
 
 ### ドキュメント更新
 - [x] **J9** README / env example / 技術仕様の環境変数・AI仕様を現状へ更新
@@ -1025,7 +1137,7 @@
     - 新規API `/api/ocr-image` / `/api/generate-report` を技術仕様へ追記
   - ファイル: `README.md`, `.env.example`, `docs/tech-spec.md`, `CLAUDE.md`, `package.json`
 
-- [ ] **J10** 未実装要件ドキュメントの実装済み項目を棚卸し
+- [x] **J10** 未実装要件ドキュメントの実装済み項目を棚卸し
   - **現状:** `docs/unimplemented_requirements.md` に、すでに実装済みの機能が未実装として残っている
   - **例:**
     - Supabase永続化
@@ -1048,7 +1160,7 @@
   - ファイル: `docs/unimplemented_requirements.md`, `docs/requirements.md`, `docs/tech-spec.md`, `docs/BACKLOG.md`
 
 ### テスト・検証基盤
-- [ ] **J11** 最低限の自動テスト/検証コマンド整備
+- [x] **J11** 最低限の自動テスト/検証コマンド整備
   - **現状:** `package.json` に `test` スクリプトがなく、CLAUDE.mdにも「テスト設定は未構築」と記載
   - **目的:** 今後のDB/API修正で実行時不具合を再発させない
   - **最小スコープ案:**
@@ -1063,7 +1175,14 @@
     - `package.json` に検証用スクリプトが追加される
     - PR/作業完了時に実行すべきコマンドがREADMEまたはCLAUDE.mdに明記される
     - 少なくともJ1/J2/J3のようなカラム不整合を検出しやすい仕組みがある
-  - ファイル: `package.json`, `CLAUDE.md`, `README.md`, `app/api/**/*.ts`, `lib/store.ts`
+  - **実施済み:**
+    - `package.json` に `typecheck` / `schema:check` / `pwa:check` / `check` を追加
+    - `scripts/check-schema-consistency.mjs` でマイグレーション番号重複、`is_public` 混在、`profiles` テーブル参照、コメント親子検証などを静的確認
+    - `scripts/check-pwa.mjs` でPWAの基本構成を静的確認
+    - `CLAUDE.md` に作業完了時の `npm run check` / `npm run build` を明記
+  - **残課題（別タスク化候補）:**
+    - API routeのユニット/統合テストは未実装。必要になった時点でテストランナー導入タスクとして分離する
+  - ファイル: `package.json`, `CLAUDE.md`, `scripts/check-schema-consistency.mjs`, `scripts/check-pwa.mjs`, `app/api/**/*.ts`, `lib/store.ts`
 
 ---
 
@@ -1282,7 +1401,7 @@
   - **まず調査だけ実施してから実装方針を決定すること**
 
 ### Readability原文の保存先調査（I1）
-- [ ] **I1** URLクリップ詳細画面のreadability原文の保存先調査 + クライアントサイド化検討
+- [x] **I1** URLクリップ詳細画面のreadability原文の保存先調査 + クライアントサイド化検討
   - **調査項目:**
     1. 現状の原文テキストはどこに保存されているか (`clips.raw_content`? `clips.summary`の一部? Supabase Storage?)
     2. `/api/extract` → `Readability` → どのカラムに書き込んでいるか確認（`lib/store.ts` + `app/api/extract/route.ts` + `app/add/page.tsx` のフロー追跡）
@@ -1293,13 +1412,20 @@
   - ファイル: `app/api/extract/route.ts`, `lib/store.ts`, `app/add/page.tsx`
 
 ### CSV一括クリップ（E2）
-- [ ] URLリストをCSVでアップロード → バッチ処理
+- [x] URLリストをCSVでアップロード → バッチ処理
   - 実装方針: `app/add/page.tsx` にCSVタブ追加 → `POST /api/batch-extract`（URLを順次処理）
   - 1件/秒程度の遅延を入れてレート制限回避
 - → **実装してよいか確認待ち**
+  - 実装してよい
+  - **実施済み:**
+    - `app/add/page.tsx` にCSVタブを追加
+    - CSV/テキスト全体からURLを抽出し、最大200件を `POST /api/batch-extract` へ送信
+    - `/api/batch-extract` で認証、URL正規化、重複URLスキップ、抽出リトライ、DB保存を実行
+    - 保存成功分は既存の `processClipAI` でAI整理を起動
+  - ファイル: `app/add/page.tsx`, `app/api/batch-extract/route.ts`
 
 ### Xブックマーク一括取り込み（E3）
-- [ ] 834件のMarkdownファイルを一括インポート
+- [~] 834件のMarkdownファイルを一括インポート
   - **形式はそのまま取り込み可能**（フィールド完全一致）
   - マッピング:
     | Markdownフィールド | clipsカラム |
@@ -1307,12 +1433,23 @@
     | コンテンツ1行目 | `title` |
     | URL（x.com/status/...） | `url` |
     | Date（ISO8601） | `created_at` |
-    | Content全文 | `summary` |
+    | Content全文 | `extracted_content` |
+    | 取り込み元メモ | `my_note` |
     | 最初の画像URL | `preview_image_url` |
     | `content_type` | `note`（diary） |
   - UI案: 設定画面に「Xブックマーク取り込み」タブ → フォルダ選択 or ZIPアップロード
   - AI整理はインポート後に一括バッチ実行
 - → **実装してよいか確認待ち**
+  - 実装してよい
+  - **実施済み:**
+    - 設定画面にMarkdown/ZIPファイル選択の取り込みUIを追加
+    - `/api/import-x-bookmarks` を追加し、`.md` と `.zip` 内Markdownをサーバー側で解析
+    - `Title` / `URL` / `Date` / `Content` 形式を優先し、なければ本文からX投稿URL・ISO8601日付・画像URLを抽出
+    - 本文はAI要約済みの `summary` ではなく `extracted_content` に保存し、既存のAI再整理導線に乗るようにした
+    - 重複URLはスキップし、保存成功分は既存の `processClipAI` でAI整理を起動
+  - **残タスク:**
+    - 実データ834件での取り込み成功率・重複処理は未検証
+  - ファイル: `app/settings/page.tsx`, `app/api/import-x-bookmarks/route.ts`
 
 ---
 

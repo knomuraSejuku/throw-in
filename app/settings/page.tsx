@@ -6,11 +6,13 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 import { AppShell } from '@/components/shell/AppShell';
-import { User, CreditCard, HardDrive, Smartphone, LogOut, Trash2, RefreshCw, Globe, Bell } from 'lucide-react';
+import { User, CreditCard, HardDrive, Smartphone, LogOut, Trash2, RefreshCw, Globe, Bell, Twitter, CheckCircle, X as XIcon } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/supabase/client';
 import { useClipStore } from '@/lib/store';
 import { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
+import clsx from 'clsx';
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
@@ -26,10 +28,16 @@ export default function SettingsPage() {
   const [isSavingNotif, setIsSavingNotif] = useState(false);
   const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
   const [canInstall, setCanInstall] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [avatarEmoji, setAvatarEmoji] = useState('🙂');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const xImportRef = useRef<HTMLInputElement>(null);
+  const [xImportFiles, setXImportFiles] = useState<File[]>([]);
+  const [xImportProgress, setXImportProgress] = useState<{ done: number; total: number } | null>(null);
+  const [xImportResults, setXImportResults] = useState<{ ok: number; skipped: number; fail: number } | null>(null);
+  const [isXImporting, setIsXImporting] = useState(false);
 
   const EMOJI_OPTIONS = ['🙂','😎','🤖','🦊','🐧','🐸','🦁','🐼','🌸','⚡','🎯','🚀','🎨','📚','🎵','🌍'];
 
@@ -37,24 +45,41 @@ export default function SettingsPage() {
     const savedLang = localStorage.getItem('preferred_language');
     if (savedLang) setPreferredLang(savedLang);
 
-    const handler = (e: Event) => {
-      e.preventDefault();
-      deferredPrompt.current = e as BeforeInstallPromptEvent;
-      setCanInstall(true);
+    const standalone = window.matchMedia('(display-mode: standalone)').matches
+      || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setIsInstalled(standalone);
+
+    const syncPrompt = () => {
+      if (window.__throwInInstallPrompt) {
+        deferredPrompt.current = window.__throwInInstallPrompt;
+        setCanInstall(true);
+      }
     };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    const installPromptHandler = () => syncPrompt();
+    const appInstalledHandler = () => {
+      deferredPrompt.current = null;
+      setCanInstall(false);
+      setIsInstalled(true);
+    };
+    syncPrompt();
+    window.addEventListener('throwin:installprompt', installPromptHandler);
+    window.addEventListener('throwin:appinstalled', appInstalledHandler);
+    return () => {
+      window.removeEventListener('throwin:installprompt', installPromptHandler);
+      window.removeEventListener('throwin:appinstalled', appInstalledHandler);
+    };
   }, []);
 
   useEffect(() => {
     if (!user) return;
-    supabase.from('users').select('display_name, avatar_emoji, notification_prefs').eq('id', user.id).single()
+    const client = createClient();
+    client.from('users').select('display_name, avatar_emoji, notification_prefs').eq('id', user.id).single()
       .then(({ data }) => {
         if (data?.display_name) setDisplayName(data.display_name);
         if (data?.avatar_emoji) setAvatarEmoji(data.avatar_emoji);
-        if (data?.notification_prefs) setNotifPrefs({ ...notifPrefs, ...data.notification_prefs });
+        if (data?.notification_prefs) setNotifPrefs(current => ({ ...current, ...data.notification_prefs }));
       });
-  }, [user?.id]);
+  }, [user]);
 
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -94,10 +119,13 @@ export default function SettingsPage() {
   };
 
   const handleInstall = async () => {
-    if (!deferredPrompt.current) return;
+    if (!deferredPrompt.current) {
+      alert('ブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選んでください。Chromeで条件を満たすと、このボタンから直接インストールできます。');
+      return;
+    }
     deferredPrompt.current.prompt();
     const { outcome } = await deferredPrompt.current.userChoice;
-    if (outcome === 'accepted') {
+    if (outcome === 'accepted' || outcome === 'dismissed') {
       deferredPrompt.current = null;
       setCanInstall(false);
     }
@@ -120,6 +148,58 @@ export default function SettingsPage() {
     }
   };
 
+  const handleXImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []).filter(f => /\.(md|zip)$/i.test(f.name));
+    setXImportFiles(files);
+    setXImportResults(null);
+    setXImportProgress(null);
+  };
+
+  const handleXImport = async () => {
+    if (xImportFiles.length === 0 || !user) return;
+    setIsXImporting(true);
+    setXImportProgress({ done: 0, total: xImportFiles.length });
+
+    try {
+      const form = new FormData();
+      xImportFiles.forEach(file => form.append('files', file));
+
+      const res = await fetch('/api/import-x-bookmarks', {
+        method: 'POST',
+        body: form,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || `インポートに失敗しました (${res.status})`);
+
+      const results = (data?.results ?? []) as Array<{
+        status: 'created' | 'skipped' | 'failed';
+        clipId?: string;
+        body?: string;
+      }>;
+
+      await useClipStore.getState().fetchClips();
+      setXImportResults({
+        ok: data?.created ?? results.filter(result => result.status === 'created').length,
+        skipped: data?.skipped ?? results.filter(result => result.status === 'skipped').length,
+        fail: data?.failed ?? results.filter(result => result.status === 'failed').length,
+      });
+
+      let done = 0;
+      const aiTargets = results.filter(result => result.status === 'created' && result.clipId && result.body && result.body.trim().length > 10);
+      setXImportProgress({ done, total: aiTargets.length || xImportFiles.length });
+      for (const result of aiTargets) {
+        await useClipStore.getState().processClipAI(result.clipId!, result.body!);
+        done++;
+        setXImportProgress({ done, total: aiTargets.length });
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'インポートに失敗しました。');
+    } finally {
+      setIsXImporting(false);
+      setXImportProgress(null);
+    }
+  };
+
   return (
     <AppShell>
       <div className="w-full max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-12">
@@ -135,7 +215,7 @@ export default function SettingsPage() {
             <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
               <div className="w-20 h-20 bg-surface-container-high rounded-full overflow-hidden border-4 border-surface shrink-0">
                 {user?.user_metadata?.avatar_url ? (
-                  <img src={user.user_metadata.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  <Image src={user.user_metadata.avatar_url} alt="Avatar" width={80} height={80} unoptimized className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full bg-primary/20 flex items-center justify-center text-primary font-bold text-2xl">
                     {user?.email?.charAt(0).toUpperCase() || 'U'}
@@ -344,11 +424,71 @@ export default function SettingsPage() {
             </div>
             <button
               onClick={handleInstall}
-              disabled={!canInstall}
-              className="px-6 py-2.5 bg-surface-container-low hover:bg-surface-container-high text-primary text-sm font-bold rounded-full transition-colors hidden md:block disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={isInstalled}
+              className={clsx(
+                "px-6 py-2.5 bg-surface-container-low hover:bg-surface-container-high text-primary text-sm font-bold rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                canInstall && "bg-primary text-white hover:bg-primary-container"
+              )}
             >
-              インストール
+              {isInstalled ? 'インストール済み' : 'インストール'}
             </button>
+          </section>
+
+          {/* X Bookmark Import */}
+          <section className="bg-surface-container-lowest rounded-[32px] p-6 md:p-8 shadow-ambient space-y-4">
+            <div className="flex items-center gap-3 text-[#1DA1F2] mb-2">
+              <Twitter className="w-6 h-6" />
+              <h3 className="font-bold text-lg">Xブックマーク一括取り込み</h3>
+            </div>
+            <p className="text-sm text-on-surface-variant leading-relaxed">
+              Xのブックマークエクスポート（MarkdownまたはZIP）を選択してインポートします。本文は原文として保存し、インポート後にAI整理を実行します。
+            </p>
+            <input
+              ref={xImportRef}
+              type="file"
+              multiple
+              accept=".md,.zip"
+              className="hidden"
+              onChange={handleXImportFileChange}
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => xImportRef.current?.click()}
+                disabled={isXImporting}
+                className="px-5 py-2.5 bg-surface-container-low hover:bg-surface-container-high text-on-surface text-sm font-bold rounded-full transition-colors disabled:opacity-50"
+              >
+                {xImportFiles.length > 0 ? `${xImportFiles.length}件選択中` : 'ファイルを選択'}
+              </button>
+              {xImportFiles.length > 0 && (
+                <button
+                  onClick={handleXImport}
+                  disabled={isXImporting}
+                  className="px-5 py-2.5 bg-[#1DA1F2] hover:bg-[#1a91da] text-white text-sm font-bold rounded-full transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isXImporting && <RefreshCw className="w-4 h-4 animate-spin" />}
+                  {isXImporting ? 'インポート中...' : `${xImportFiles.length}件をインポート`}
+                </button>
+              )}
+            </div>
+            {xImportProgress && (
+              <div className="space-y-1">
+                <div className="h-1.5 bg-outline-variant/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#1DA1F2] rounded-full transition-all"
+                    style={{ width: `${(xImportProgress.done / xImportProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-on-surface-variant">{xImportProgress.done} / {xImportProgress.total}</p>
+              </div>
+            )}
+            {xImportResults && (
+              <div className="flex items-center gap-2 text-sm">
+                <CheckCircle className="w-4 h-4 text-success" />
+                <span className="text-on-surface font-bold">{xImportResults.ok}件保存</span>
+                {xImportResults.skipped > 0 && <span className="text-outline">{xImportResults.skipped}件スキップ</span>}
+                {xImportResults.fail > 0 && <span className="text-error">{xImportResults.fail}件失敗</span>}
+              </div>
+            )}
           </section>
 
           {/* Destructive / Sign Out */}

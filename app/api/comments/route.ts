@@ -129,6 +129,24 @@ export async function POST(req: NextRequest) {
     const { data: clip } = await anonClient.from('clips').select('user_id').eq('id', clipId).eq('is_global_search', true).single();
     if (!clip) return NextResponse.json({ error: 'Clip not found or not public' }, { status: 404 });
 
+    let parentCommentUserId: string | null = null;
+    if (parentId) {
+      const { data: parentComment, error: parentError } = await anonClient
+        .from('clip_comments')
+        .select('id, clip_id, user_id, parent_id')
+        .eq('id', parentId)
+        .maybeSingle();
+
+      if (parentError) return NextResponse.json({ error: parentError.message }, { status: 500 });
+      if (!parentComment || parentComment.clip_id !== clipId) {
+        return NextResponse.json({ error: 'Parent comment not found for this clip' }, { status: 400 });
+      }
+      if (parentComment.parent_id) {
+        return NextResponse.json({ error: 'Nested replies are not supported' }, { status: 400 });
+      }
+      parentCommentUserId = parentComment.user_id;
+    }
+
     const { data: comment, error } = await supabase
       .from('clip_comments')
       .insert({ clip_id: clipId, user_id: user.id, content: content.trim(), parent_id: parentId ?? null })
@@ -144,9 +162,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     // Notify clip owner or parent commenter (skip if self)
-    const notifyUserId = parentId
-      ? (await anonClient.from('clip_comments').select('user_id').eq('id', parentId).single()).data?.user_id
-      : clip.user_id;
+    const notifyUserId = parentCommentUserId ?? clip.user_id;
 
     if (notifyUserId && notifyUserId !== user.id) {
       await supabase.from('notifications').insert({

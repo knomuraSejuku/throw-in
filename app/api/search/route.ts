@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const q = searchParams.get('q')?.trim() ?? '';
   const type = searchParams.get('type') ?? '';
+  const tag = searchParams.get('tag')?.trim() ?? '';
   const userId = searchParams.get('userId') ?? '';
   const following = searchParams.get('following') === 'true';
   const limit = parseInt(searchParams.get('limit') ?? '50', 10);
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
     .select(`
       id, title, summary, url, source_domain, preview_image_url,
       content_type, category, subcategory, created_at, user_id,
-      clip_tags (name),
+      clip_tags${tag ? '!inner' : ''} (name),
       users (display_name, avatar_emoji)
     `)
     .eq('is_global_search', true)
@@ -68,6 +69,10 @@ export async function GET(req: NextRequest) {
   if (type && TYPE_MAP[type]) {
     const dbType = { url: 'article', video: 'video', image: 'image', pdf: 'document', diary: 'note' }[type as string];
     if (dbType) query = query.eq('content_type', dbType);
+  }
+
+  if (tag) {
+    query = query.eq('clip_tags.name', tag);
   }
 
   if (q) {

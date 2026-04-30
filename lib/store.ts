@@ -57,6 +57,7 @@ interface ClipStore {
   addClip: (clip: Omit<Clip, 'id' | 'timestamp'>) => void;
   updateClip: (id: string, updates: Partial<Clip>) => Promise<void>;
   deleteClip: (id: string) => Promise<void>;
+  archiveClip: (id: string, archive?: boolean) => Promise<void>;
   toggleRead: (id: string) => Promise<void>;
   toggleBookmark: (id: string) => Promise<void>;
   startProcessingJob: (id: string, initialStatus: string) => void;
@@ -261,11 +262,11 @@ export const useClipStore = create<ClipStore>()(
         if (clipIds.length > 0) {
           const { data: counts } = await supabase
             .from('clips')
-            .select('original_clip_id')
-            .in('original_clip_id', clipIds);
+            .select('saved_from_clip_id')
+            .in('saved_from_clip_id', clipIds);
           if (counts) {
             counts.forEach((c: any) => {
-              if (c.original_clip_id) saveCounts[c.original_clip_id] = (saveCounts[c.original_clip_id] ?? 0) + 1;
+              if (c.saved_from_clip_id) saveCounts[c.saved_from_clip_id] = (saveCounts[c.saved_from_clip_id] ?? 0) + 1;
             });
           }
         }
@@ -357,6 +358,18 @@ export const useClipStore = create<ClipStore>()(
     
     set((state) => ({
       clips: state.clips.filter(clip => clip.id !== id)
+    }));
+  },
+
+  archiveClip: async (id, archive = true) => {
+    const supabase = createClient();
+    const { error } = await supabase.from('clips').update({ is_archived: archive }).eq('id', id);
+    if (error) {
+      console.error("Archive error", error);
+      throw error;
+    }
+    set((state) => ({
+      clips: state.clips.map(clip => clip.id === id ? { ...clip, isArchived: archive } : clip)
     }));
   },
 

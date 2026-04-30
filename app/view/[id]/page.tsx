@@ -1,8 +1,8 @@
 'use client';
 
-import { use, useEffect, useState, useCallback } from 'react';
+import { use, useEffect, useState, useRef } from 'react';
 import { AppShell } from '@/components/shell/AppShell';
-import { ArrowLeft, ExternalLink, Clock, Hash, Tag, Loader2, BookmarkPlus, Check, Heart, Trash2, MessageCircle, Send, Pencil, X } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Clock, Hash, Tag, Loader2, BookmarkPlus, Check, Pencil, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -10,21 +10,11 @@ import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import { useAuthStore } from '@/lib/auth-store';
 import { CATEGORY_TAXONOMY } from '@/lib/store';
+import { CommentSection } from '@/components/comments/CommentSection';
 
 const TYPE_LABELS: Record<string, string> = {
   url: '記事', video: '動画', image: '画像', pdf: 'ドキュメント', diary: '日記・メモ',
 };
-
-interface Comment {
-  id: string;
-  content: string;
-  parent_id: string | null;
-  created_at: string;
-  user_id: string;
-  profiles: { display_name: string | null; avatar_emoji: string | null } | null;
-  likeCount: number;
-  likedByMe: boolean;
-}
 
 interface PublicClip {
   id: string;
@@ -53,11 +43,8 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
   const [notFound, setNotFound] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [commentText, setCommentText] = useState('');
-  const [commentError, setCommentError] = useState<string | null>(null);
-  const [replyTo, setReplyTo] = useState<string | null>(null);
-  const [posting, setPosting] = useState(false);
+  const [showStickyHeader, setShowStickyHeader] = useState(false);
+  const metaRef = useRef<HTMLDivElement>(null);
   const [editingMeta, setEditingMeta] = useState(false);
   const [editCategory, setEditCategory] = useState<string>('');
   const [editSubcategory, setEditSubcategory] = useState<string>('');
@@ -78,19 +65,16 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
       .finally(() => setLoading(false));
   }, [id]);
 
-  const fetchComments = useCallback(() => {
-    fetch(`/api/comments?clipId=${id}`)
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => {
-        setComments(data.comments ?? []);
-        setCommentError(null);
-      })
-      .catch(() => {
-        setCommentError('コメントの取得に失敗しました。');
-      });
-  }, [id]);
-
-  useEffect(() => { fetchComments(); }, [fetchComments]);
+  useEffect(() => {
+    const el = metaRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setShowStickyHeader(!entry.isIntersecting),
+      { threshold: 0, rootMargin: '-64px 0px 0px 0px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [clip?.id]);
 
   if (loading) {
     return (
@@ -129,53 +113,6 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
     if (res.ok || res.status === 409) setSaved(true);
   }
 
-  async function handlePostComment() {
-    if (!user || !commentText.trim() || posting) return;
-    setPosting(true);
-    const res = await fetch('/api/comments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'post', clipId: id, content: commentText.trim(), parentId: replyTo }),
-    });
-    setPosting(false);
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      if (data?.comment) {
-        setComments(prev => [...prev.filter(c => c.id !== data.comment.id), data.comment]);
-      }
-      setCommentText('');
-      setReplyTo(null);
-      setCommentError(null);
-      fetchComments();
-    } else {
-      const data = await res.json().catch(() => null);
-      setCommentError(data?.error ?? 'コメントの投稿に失敗しました。');
-    }
-  }
-
-  async function handleLike(commentId: string) {
-    if (!user) return;
-    setComments(prev => prev.map(c => c.id === commentId
-      ? { ...c, likedByMe: !c.likedByMe, likeCount: c.likedByMe ? c.likeCount - 1 : c.likeCount + 1 }
-      : c
-    ));
-    await fetch('/api/comments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'like', commentId }),
-    });
-  }
-
-  async function handleDeleteComment(commentId: string) {
-    if (!user) return;
-    await fetch('/api/comments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', commentId }),
-    });
-    fetchComments();
-  }
-
   async function handleSaveMeta() {
     if (!clip) return;
     setSavingMeta(true);
@@ -191,12 +128,67 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  const topLevel = comments.filter(c => !c.parent_id);
-
-  const replies = (parentId: string) => comments.filter(c => c.parent_id === parentId);
-
   return (
     <AppShell>
+      {/* Sticky sub-header */}
+      <div
+        className={clsx(
+          'fixed top-[64px] lg:top-[64px] left-0 right-0 lg:left-72 z-20 transition-all duration-200',
+          showStickyHeader ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
+        )}
+      >
+        <div className="bg-background/90 backdrop-blur-xl border-b border-outline-variant/15 px-4 md:px-8 pt-4 pb-3 md:py-3 max-w-3xl mx-auto lg:max-w-none lg:mx-0 lg:px-8">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <button
+                onClick={() => router.back()}
+                className="p-1 rounded-full text-on-surface-variant hover:text-on-surface transition-colors shrink-0"
+                title="戻る"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <span className={clsx(
+                'px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0',
+                clip.type === 'url' && 'bg-tertiary/10 text-tertiary',
+                clip.type === 'pdf' && 'bg-primary/10 text-primary',
+                clip.type === 'video' && 'bg-secondary/10 text-secondary',
+                (clip.type === 'diary' || clip.type === 'image') && 'bg-surface-container-highest text-on-surface-variant',
+              )}>
+                {typeLabel}
+              </span>
+              <span className="text-[11px] text-on-surface-variant shrink-0">{clip.date}</span>
+              {clip.category && (
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-tertiary/10 text-tertiary rounded-full text-[10px] font-bold shrink-0">
+                  <Tag className="w-2.5 h-2.5" />
+                  {clip.category}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {canSave && (
+                <button
+                  onClick={handleSave}
+                  disabled={saving || saved}
+                  className={clsx(
+                    'p-1.5 rounded-full transition-colors',
+                    saved ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface hover:bg-surface-container-highest'
+                  )}
+                  title={saved ? '保存済み' : '保存する'}
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : <BookmarkPlus className="w-4 h-4" />}
+                </button>
+              )}
+              {clip.url && (
+                <a href={clip.url} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-full bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-colors" title="原典を開く">
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
+            </div>
+          </div>
+          <p className="text-sm font-bold text-on-surface truncate mt-1 pr-4">{clip.title}</p>
+        </div>
+      </div>
+
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 pb-32">
         <div className="flex items-center justify-between mb-8">
           <button
@@ -248,7 +240,7 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div ref={metaRef} className="flex flex-wrap items-center gap-3 mb-4">
           <span className={clsx(
             "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
             clip.type === 'url' && "bg-tertiary/10 text-tertiary",
@@ -437,143 +429,8 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
           </div>
         )}
 
-        {/* コメントセクション */}
-        <div className="mt-10 space-y-4">
-          <h2 className="flex items-center gap-2 text-base font-bold text-on-surface">
-            <MessageCircle className="w-5 h-5 text-primary" />
-            コメント {comments.length > 0 && <span className="text-on-surface-variant font-normal">({comments.length})</span>}
-          </h2>
-
-          {commentError && (
-            <p className="rounded-xl border border-error/20 bg-error/5 px-3 py-2 text-sm text-error">
-              {commentError}
-            </p>
-          )}
-
-          {topLevel.map(c => (
-            <div key={c.id} className="space-y-2">
-              <CommentItem
-                comment={c}
-                userId={user?.id}
-                onLike={handleLike}
-                onDelete={handleDeleteComment}
-                onReply={setReplyTo}
-                isReplyTarget={replyTo === c.id}
-              />
-              {replies(c.id).map(r => (
-                <div key={r.id} className="ml-8">
-                  <CommentItem
-                    comment={r}
-                    userId={user?.id}
-                    onLike={handleLike}
-                    onDelete={handleDeleteComment}
-                    onReply={() => {}}
-                    isReplyTarget={false}
-                  />
-                </div>
-              ))}
-              {replyTo === c.id && user && (
-                <div className="ml-8 flex gap-2 items-end">
-                  <textarea
-                    value={commentText}
-                    onChange={e => setCommentText(e.target.value)}
-                    placeholder="返信を入力..."
-                    rows={2}
-                    maxLength={1000}
-                    className="flex-1 px-3 py-2 bg-surface-container rounded-xl text-sm text-on-surface border border-outline-variant/30 resize-none focus:outline-none focus:border-primary"
-                  />
-                  <button onClick={handlePostComment} disabled={posting || !commentText.trim()}
-                    className="p-2 bg-primary text-on-primary rounded-xl disabled:opacity-50">
-                    {posting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  </button>
-                  <button onClick={() => { setReplyTo(null); setCommentText(''); }}
-                    className="p-2 text-on-surface-variant hover:text-on-surface rounded-xl text-xs">
-                    キャンセル
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {user && !replyTo && (
-            <div className="flex gap-2 items-end pt-2">
-              <textarea
-                value={commentText}
-                onChange={e => setCommentText(e.target.value)}
-                placeholder="コメントを追加..."
-                rows={2}
-                maxLength={1000}
-                className="flex-1 px-3 py-2 bg-surface-container rounded-xl text-sm text-on-surface border border-outline-variant/30 resize-none focus:outline-none focus:border-primary"
-              />
-              <button onClick={handlePostComment} disabled={posting || !commentText.trim()}
-                className="p-2 bg-primary text-on-primary rounded-xl disabled:opacity-50">
-                {posting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              </button>
-            </div>
-          )}
-
-          {!user && (
-            <p className="text-sm text-on-surface-variant">
-              <Link href="/login" className="text-primary hover:underline">ログイン</Link>するとコメントできます
-            </p>
-          )}
-        </div>
+        <CommentSection clipId={id} />
       </div>
     </AppShell>
-  );
-}
-
-function CommentItem({ comment, userId, onLike, onDelete, onReply, isReplyTarget }: {
-  comment: Comment;
-  userId: string | undefined;
-  onLike: (id: string) => void;
-  onDelete: (id: string) => void;
-  onReply: (id: string) => void;
-  isReplyTarget: boolean;
-}) {
-  const isOwn = userId === comment.user_id;
-  const relTime = new Date(comment.created_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-  return (
-    <div className={clsx(
-      "p-4 bg-surface-container-lowest rounded-2xl shadow-ambient/50 border",
-      isReplyTarget ? "border-primary/40" : "border-outline-variant/20"
-    )}>
-      <div className="flex items-start gap-3">
-        <span className="text-lg leading-none mt-0.5">{comment.profiles?.avatar_emoji ?? '🙂'}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-bold text-on-surface truncate">{comment.profiles?.display_name ?? '匿名'}</span>
-            <span className="text-[10px] text-on-surface-variant">{relTime}</span>
-          </div>
-          <p className="text-sm text-on-surface whitespace-pre-wrap break-words">{comment.content}</p>
-          <div className="flex items-center gap-3 mt-2">
-            <button
-              onClick={() => onLike(comment.id)}
-              disabled={!userId}
-              className={clsx("flex items-center gap-1 text-xs transition-colors disabled:opacity-40",
-                comment.likedByMe ? "text-error" : "text-on-surface-variant hover:text-error"
-              )}
-            >
-              <Heart className={clsx("w-3.5 h-3.5", comment.likedByMe && "fill-current")} />
-              {comment.likeCount > 0 && comment.likeCount}
-            </button>
-            {userId && !comment.parent_id && (
-              <button onClick={() => onReply(comment.id)}
-                className="flex items-center gap-1 text-xs text-on-surface-variant hover:text-primary transition-colors">
-                <MessageCircle className="w-3.5 h-3.5" />
-                返信
-              </button>
-            )}
-            {isOwn && (
-              <button onClick={() => onDelete(comment.id)}
-                className="flex items-center gap-1 text-xs text-on-surface-variant hover:text-error transition-colors ml-auto">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }

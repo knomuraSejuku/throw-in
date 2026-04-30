@@ -2,7 +2,7 @@
 
 import { AppShell } from '@/components/shell/AppShell';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { X, Link as LinkIcon, Upload, Edit3, Tag as TagIcon, Plus, Loader2, CheckCircle, Globe } from 'lucide-react';
+import { X, Link as LinkIcon, Upload, Edit3, Tag as TagIcon, Plus, Loader2, CheckCircle, Globe, FileText } from 'lucide-react';
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { CelebrationEffect } from '@/components/effects/CelebrationEffect';
 import clsx from 'clsx';
@@ -50,7 +50,7 @@ const readApiError = async (response: Response): Promise<string> => {
 function AddClipForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<'url' | 'upload' | 'diary'>('url');
+  const [mode, setMode] = useState<'url' | 'upload' | 'diary' | 'csv'>('url');
   
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -86,6 +86,74 @@ function AddClipForm() {
   const [errorMsg, setErrorMsg] = useState('');
   const [warnMsg, setWarnMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
+  const [csvUrls, setCsvUrls] = useState<string[]>([]);
+  const [csvProgress, setCsvProgress] = useState<{ done: number; total: number } | null>(null);
+  const [csvResults, setCsvResults] = useState<{ url: string; success: boolean; error?: string }[]>([]);
+
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setErrorMsg('');
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const urls = Array.from(new Set(text.match(/https?:\/\/[^\s"',)]+/g) ?? [])).slice(0, 200);
+      setCsvUrls(urls);
+      setCsvResults([]);
+      setCsvProgress(null);
+    };
+    reader.readAsText(f);
+  };
+
+  const handleCsvBatch = async () => {
+    if (csvUrls.length === 0) return;
+    setIsSaving(true);
+    setErrorMsg('');
+    setCsvProgress({ done: 0, total: csvUrls.length });
+
+    try {
+      const res = await fetch('/api/batch-extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: csvUrls }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || `一括保存に失敗しました (${res.status})`);
+      }
+
+      const batchResults = (data?.results ?? []) as Array<{
+        url: string;
+        status: 'created' | 'skipped' | 'failed';
+        clipId?: string;
+        title?: string;
+        body?: string | null;
+        error?: string;
+        reason?: string;
+      }>;
+
+      setCsvResults(batchResults.map(result => ({
+        url: result.url,
+        success: result.status !== 'failed',
+        error: result.status === 'skipped' ? '重複のためスキップ' : result.error,
+      })));
+      setCsvProgress({ done: batchResults.length, total: csvUrls.length });
+
+      await useClipStore.getState().fetchClips();
+
+      for (const result of batchResults) {
+        if (result.status === 'created' && result.clipId && result.body && result.body.trim().length > 10) {
+          useClipStore.getState().processClipAI(result.clipId, result.body);
+        }
+      }
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : '一括保存に失敗しました。');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setErrorMsg('');
@@ -388,7 +456,7 @@ function AddClipForm() {
                 <Upload className="w-5 h-5" />
                 <span>アップロード</span>
               </button>
-              <button 
+              <button
                 onClick={() => setMode('diary')}
                 disabled={isSaving}
                 className={clsx(
@@ -398,6 +466,17 @@ function AddClipForm() {
               >
                 <Edit3 className="w-5 h-5" />
                 <span>日記作成</span>
+              </button>
+              <button
+                onClick={() => setMode('csv')}
+                disabled={isSaving}
+                className={clsx(
+                  "flex items-center gap-3 rounded-2xl px-4 py-3 min-w-max transition-all font-semibold text-sm",
+                  mode === 'csv' ? "bg-primary-container text-on-primary-container" : "text-on-surface-variant hover:bg-surface-container-high outline-none disabled:opacity-50"
+                )}
+              >
+                <FileText className="w-5 h-5" />
+                <span>CSV一括</span>
               </button>
             </div>
 
@@ -478,7 +557,7 @@ function AddClipForm() {
               {mode === 'diary' && (
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-on-surface-variant tracking-wider uppercase">日付</label>
-                  <input 
+                  <input
                     type="date"
                     disabled={isSaving}
                     defaultValue={new Date().toLocaleDateString('en-CA')}
@@ -487,115 +566,184 @@ function AddClipForm() {
                 </div>
               )}
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-on-surface-variant tracking-wider uppercase">カスタムタイトル (任意)</label>
-                <input 
-                  type="text"
-                  value={title}
-                  disabled={isSaving}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full bg-surface-container-low border-none rounded-2xl px-4 py-4 text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 transition-all outline-none disabled:opacity-50"
-                  placeholder={mode === 'diary' ? "日記のタイトル" : "タイトルを入力"}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-on-surface-variant tracking-wider uppercase">{mode === 'diary' ? '本文' : 'パーソナルメモ'}</label>
-                <textarea 
-                  value={note}
-                  disabled={isSaving}
-                  onChange={(e) => setNote(e.target.value)}
-                  className="w-full bg-surface-container-low border-none rounded-2xl px-4 py-4 text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 transition-all outline-none resize-none disabled:opacity-50"
-                  placeholder={mode === 'diary' ? "今日あったことを書き留めましょう" : "なぜこれを保存しましたか？"}
-                  rows={mode === 'diary' ? 6 : 4}
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-2 pt-2">
-                {tags.map((tag) => (
-                  <span key={tag} className="inline-flex items-center gap-1.5 bg-surface-container-high text-on-surface-variant px-3 py-1.5 rounded-full text-xs font-semibold">
-                    <TagIcon className="w-3.5 h-3.5" /> {tag}
-                    <button
-                      type="button"
-                      onClick={() => setTags(tags.filter(t => t !== tag))}
-                      className="ml-0.5 hover:text-error transition-colors"
-                    >×</button>
-                  </span>
-                ))}
-                <div className="inline-flex items-center gap-1 border border-outline-variant/30 rounded-full overflow-hidden">
-                  <input
-                    type="text"
-                    value={tagInput}
-                    onChange={e => setTagInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const t = tagInput.trim().replace(/^#/, '');
-                        if (t && !tags.includes(t)) setTags([...tags, t]);
-                        setTagInput('');
-                      }
-                    }}
-                    placeholder="タグを追加..."
-                    disabled={isSaving}
-                    className="bg-transparent pl-3 py-1.5 text-xs outline-none w-24 placeholder:text-outline disabled:opacity-50"
-                  />
-                  <button
-                    type="button"
-                    disabled={isSaving}
-                    onClick={() => {
-                      const t = tagInput.trim().replace(/^#/, '');
-                      if (t && !tags.includes(t)) setTags([...tags, t]);
-                      setTagInput('');
-                    }}
-                    className="pr-3 text-on-surface-variant hover:text-primary transition-colors disabled:opacity-50"
+              {mode === 'csv' && (
+                <div className="space-y-4">
+                  <input type="file" accept=".csv,.txt" className="hidden" ref={csvFileInputRef} onChange={handleCsvFileChange} />
+                  <div
+                    onClick={() => !isSaving && csvFileInputRef.current?.click()}
+                    className={clsx(
+                      "w-full border-2 border-dashed rounded-2xl px-4 py-8 flex flex-col items-center justify-center gap-2 transition-colors text-center",
+                      csvUrls.length > 0 ? "bg-surface-container border-primary/40" : "bg-surface-container-low border-outline-variant/30 hover:bg-surface-container",
+                      !isSaving && "cursor-pointer",
+                      isSaving && "opacity-50"
+                    )}
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+                    <FileText className="w-8 h-8 text-outline" />
+                    <p className="font-bold text-on-surface-variant text-sm">CSVファイルを選択</p>
+                    <p className="text-xs text-outline">ファイル内のURLを抽出（最大200件）</p>
+                  </div>
+                  {csvUrls.length > 0 && (
+                    <div className="rounded-2xl bg-surface-container-low p-4 space-y-2">
+                      <p className="text-xs font-bold text-on-surface-variant">{csvUrls.length}件のURL</p>
+                      <div className="max-h-48 overflow-y-auto space-y-1">
+                        {(csvResults.length > 0 ? csvResults : csvUrls.map(url => ({ url, success: false, error: undefined }))).map((result, i) => {
+                          return (
+                            <div key={i} className="flex items-center gap-2 text-xs">
+                              {csvResults.length > 0 ? (
+                                result.success
+                                  ? <CheckCircle className="w-3 h-3 text-success shrink-0" />
+                                  : <X className="w-3 h-3 text-error shrink-0" />
+                              ) : (
+                                <div className="w-3 h-3 rounded-full bg-outline-variant/40 shrink-0" />
+                              )}
+                              <span className={clsx("truncate", csvResults.length > 0 && result.success === false && "text-error")}>{result.url}</span>
+                              {result.error && <span className="shrink-0 text-[10px] text-outline">{result.error}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {csvProgress && (
+                        <div className="pt-2">
+                          <div className="h-1.5 bg-outline-variant/20 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all"
+                              style={{ width: `${(csvProgress.done / csvProgress.total) * 100}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-on-surface-variant mt-1">{csvProgress.done} / {csvProgress.total} 完了</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
+
+              {mode !== 'csv' && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-on-surface-variant tracking-wider uppercase">カスタムタイトル (任意)</label>
+                    <input
+                      type="text"
+                      value={title}
+                      disabled={isSaving}
+                      onChange={(e) => setTitle(e.target.value)}
+                      className="w-full bg-surface-container-low border-none rounded-2xl px-4 py-4 text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 transition-all outline-none disabled:opacity-50"
+                      placeholder={mode === 'diary' ? "日記のタイトル" : "タイトルを入力"}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-on-surface-variant tracking-wider uppercase">{mode === 'diary' ? '本文' : 'パーソナルメモ'}</label>
+                    <textarea
+                      value={note}
+                      disabled={isSaving}
+                      onChange={(e) => setNote(e.target.value)}
+                      className="w-full bg-surface-container-low border-none rounded-2xl px-4 py-4 text-on-surface placeholder:text-outline focus:ring-2 focus:ring-primary/20 transition-all outline-none resize-none disabled:opacity-50"
+                      placeholder={mode === 'diary' ? "今日あったことを書き留めましょう" : "なぜこれを保存しましたか？"}
+                      rows={mode === 'diary' ? 6 : 4}
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {tags.map((tag) => (
+                      <span key={tag} className="inline-flex items-center gap-1.5 bg-surface-container-high text-on-surface-variant px-3 py-1.5 rounded-full text-xs font-semibold">
+                        <TagIcon className="w-3.5 h-3.5" /> {tag}
+                        <button
+                          type="button"
+                          onClick={() => setTags(tags.filter(t => t !== tag))}
+                          className="ml-0.5 hover:text-error transition-colors"
+                        >×</button>
+                      </span>
+                    ))}
+                    <div className="inline-flex items-center gap-1 border border-outline-variant/30 rounded-full overflow-hidden">
+                      <input
+                        type="text"
+                        value={tagInput}
+                        onChange={e => setTagInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const t = tagInput.trim().replace(/^#/, '');
+                            if (t && !tags.includes(t)) setTags([...tags, t]);
+                            setTagInput('');
+                          }
+                        }}
+                        placeholder="タグを追加..."
+                        disabled={isSaving}
+                        className="bg-transparent pl-3 py-1.5 text-xs outline-none w-24 placeholder:text-outline disabled:opacity-50"
+                      />
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => {
+                          const t = tagInput.trim().replace(/^#/, '');
+                          if (t && !tags.includes(t)) setTags([...tags, t]);
+                          setTagInput('');
+                        }}
+                        className="pr-3 text-on-surface-variant hover:text-primary transition-colors disabled:opacity-50"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsGlobalSearch(v => !v)}
-                disabled={isSaving}
-                className={clsx(
-                  "inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors",
-                  isGlobalSearch ? "bg-primary" : "bg-outline-variant/40"
-                )}
-              >
-                <span className={clsx(
-                  "inline-block h-5 w-5 rounded-full bg-white shadow transition-transform",
-                  isGlobalSearch ? "translate-x-[1.375rem]" : "translate-x-0.5"
-                )} />
-              </button>
-              <span className="text-xs text-on-surface-variant flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5" />
-                グローバル検索に公開
-              </span>
-            </div>
+            {mode !== 'csv' && (
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsGlobalSearch(v => !v)}
+                  disabled={isSaving}
+                  className={clsx(
+                    "inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors",
+                    isGlobalSearch ? "bg-primary" : "bg-outline-variant/40"
+                  )}
+                >
+                  <span className={clsx(
+                    "inline-block h-5 w-5 rounded-full bg-white shadow transition-transform",
+                    isGlobalSearch ? "translate-x-[1.375rem]" : "translate-x-0.5"
+                  )} />
+                </button>
+                <span className="text-xs text-on-surface-variant flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5" />
+                  グローバル検索に公開
+                </span>
+              </div>
+            )}
 
             <div className="pt-4 flex items-center justify-end gap-3">
-              <button 
+              <button
                 onClick={() => router.back()}
                 disabled={isSaving}
                 className="px-6 py-3 rounded-full text-sm font-semibold text-on-surface-variant hover:bg-surface-container-low transition-colors disabled:opacity-50"
               >
                 キャンセル
               </button>
-              <button
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setSaveOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-                  handleSave();
-                }}
-                disabled={isSaving}
-                className="px-8 py-3 rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-sm shadow-primary hover:scale-105 active:scale-95 transition-all disabled:opacity-75 flex items-center gap-2"
-              >
-                {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isSaving ? '保存中...' : '保存する'}
-              </button>
+              {mode === 'csv' ? (
+                <button
+                  onClick={handleCsvBatch}
+                  disabled={isSaving || csvUrls.length === 0}
+                  className="px-8 py-3 rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-sm shadow-primary hover:scale-105 active:scale-95 transition-all disabled:opacity-75 flex items-center gap-2"
+                >
+                  {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isSaving ? '保存中...' : `一括保存する（${csvUrls.length}件）`}
+                </button>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setSaveOrigin({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+                    handleSave();
+                  }}
+                  disabled={isSaving}
+                  className="px-8 py-3 rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold text-sm shadow-primary hover:scale-105 active:scale-95 transition-all disabled:opacity-75 flex items-center gap-2"
+                >
+                  {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isSaving ? '保存中...' : '保存する'}
+                </button>
+              )}
             </div>
             
           </div>

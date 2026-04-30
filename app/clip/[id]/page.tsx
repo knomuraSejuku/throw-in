@@ -4,7 +4,7 @@ import { use, useEffect, useState, useRef } from 'react';
 import { AppShell } from '@/components/shell/AppShell';
 import { useClipStore, useCollectionStore } from '@/lib/store';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Clock, ExternalLink, Hash, Loader2, Bookmark, CheckCircle2, BookmarkCheck, Trash2, FileText, Image as ImageIcon, Video, Book, FolderPlus, Languages, AlertTriangle, RefreshCw, Tag, Pencil, Plus, Check, X, Globe } from 'lucide-react';
+import { ArrowLeft, Clock, ExternalLink, Hash, Loader2, Bookmark, CheckCircle2, BookmarkCheck, Trash2, Archive, ArchiveRestore, FileText, Image as ImageIcon, Video, Book, FolderPlus, Languages, AlertTriangle, RefreshCw, Tag, Pencil, Plus, Check, X, Globe } from 'lucide-react';
 import Image from 'next/image';
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
@@ -13,6 +13,7 @@ import rehypeSanitize from 'rehype-sanitize';
 import { createClient } from '@/lib/supabase/client';
 import { CelebrationEffect } from '@/components/effects/CelebrationEffect';
 import { aiJustCompleted } from '@/lib/store';
+import { CommentSection } from '@/components/comments/CommentSection';
 
 function formatPlainArticleText(text: string): string {
   const trimmed = text.trim();
@@ -37,7 +38,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
   const unwrappedParams = use(params);
   const id = unwrappedParams.id;
   
-  const { clips, fetchClips, toggleRead, toggleBookmark, deleteClip, translateClip, updateClip, isLoading, processingJobs, processClipAI } = useClipStore();
+  const { clips, fetchClips, toggleRead, toggleBookmark, deleteClip, archiveClip, translateClip, updateClip, isLoading, processingJobs, processClipAI } = useClipStore();
   const { collections, fetchCollections, addClipToCollection, removeClipFromCollection } = useCollectionStore();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showCollectionMenu, setShowCollectionMenu] = useState(false);
@@ -68,6 +69,8 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
   }, [fetchCollections]);
 
   const clip = clips.find(c => c.id === id);
+  const clipId = clip?.id;
+  const clipIsUnread = clip?.isUnread;
 
   // Record history when clip is loaded
   useEffect(() => {
@@ -102,32 +105,32 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
 
   // AI処理完了検知: processingJobs[id] が 'done' になったタイミングで消費
   useEffect(() => {
-    if (!clip) return;
-    if (clipProcessingJob === 'done' && aiJustCompleted.has(clip.id)) {
-      aiJustCompleted.delete(clip.id);
+    if (!clipId) return;
+    if (clipProcessingJob === 'done' && aiJustCompleted.has(clipId)) {
+      aiJustCompleted.delete(clipId);
       setShowAiEffect(true);
     }
-  }, [clip?.id, clipProcessingJob]);
+  }, [clipId, clipProcessingJob]);
 
   // 既読切り替え検知 (ボタン押下 / auto-read 両対応)
   useEffect(() => {
-    if (!clip) return;
+    if (clipIsUnread === undefined) return;
     const prev = prevIsUnreadRef.current;
-    if (prev === true && clip.isUnread === false) {
+    if (prev === true && clipIsUnread === false) {
       const origin = readButtonOriginRef.current
         ?? { x: window.innerWidth / 2, y: window.innerHeight * 0.55 };
       readButtonOriginRef.current = null;
       setReadEffect({ origin });
     }
-    prevIsUnreadRef.current = clip.isUnread;
-  }, [clip?.isUnread]);
+    prevIsUnreadRef.current = clipIsUnread;
+  }, [clipIsUnread]);
 
   // Auto-mark as read after 3 seconds if unread
   useEffect(() => {
-    if (!clip || !clip.isUnread) return;
-    const timer = setTimeout(() => toggleRead(clip.id), 3000);
+    if (!clipId || !clipIsUnread) return;
+    const timer = setTimeout(() => toggleRead(clipId), 3000);
     return () => clearTimeout(timer);
-  }, [clip?.id, clip?.isUnread, toggleRead]);
+  }, [clipId, clipIsUnread, toggleRead]);
 
   if (isLoading && !clip) {
     return (
@@ -169,6 +172,13 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
       setIsDeleting(false);
       router.push('/');
     }
+  };
+
+  const handleArchive = async () => {
+    const next = !clip.isArchived;
+    if (next && !window.confirm('このクリップをアーカイブしますか？（ライブラリから非表示になります）')) return;
+    await archiveClip(clip.id, next);
+    if (next) router.push('/');
   };
 
   const handleTranslate = async () => {
@@ -250,6 +260,9 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
               <button onClick={() => toggleBookmark(clip.id)} className={clsx('p-1.5 rounded-full transition-colors', clip.isBookmarked ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface')} title={clip.isBookmarked ? 'ブックマーク解除' : 'ブックマーク'}>
                 {clip.isBookmarked ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
               </button>
+              <button onClick={handleArchive} className={clsx("p-1.5 rounded-full transition-colors", clip.isArchived ? "bg-secondary/10 text-secondary hover:bg-secondary/20" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest")} title={clip.isArchived ? "アーカイブ解除" : "アーカイブ"}>
+                {clip.isArchived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+              </button>
               <button onClick={handleDelete} disabled={isDeleting} className="p-1.5 rounded-full bg-surface-container-high text-error hover:bg-error/10 transition-colors disabled:opacity-50" title="削除">
                 {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
               </button>
@@ -330,7 +343,14 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
             >
               {clip.isBookmarked ? <BookmarkCheck className="w-5 h-5" /> : <Bookmark className="w-5 h-5" />}
             </button>
-            <button 
+            <button
+              onClick={handleArchive}
+              className={clsx("p-2 rounded-full transition-colors", clip.isArchived ? "bg-secondary/10 text-secondary hover:bg-secondary/20" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest")}
+              title={clip.isArchived ? "アーカイブ解除" : "アーカイブ"}
+            >
+              {clip.isArchived ? <ArchiveRestore className="w-5 h-5" /> : <Archive className="w-5 h-5" />}
+            </button>
+            <button
               onClick={handleDelete}
               disabled={isDeleting}
               className="p-2 rounded-full bg-surface-container-high text-error hover:bg-error/10 transition-colors disabled:opacity-50"
@@ -456,7 +476,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
           if (clip.type === 'image' && clip.url) {
             return (
               <div className="w-full rounded-[32px] overflow-hidden mb-12 shadow-ambient border border-outline-variant/10 flex items-center justify-center bg-surface-container-low">
-                <img src={clip.url} alt={clip.title} className="max-w-full max-h-[70vh] object-contain" />
+                <Image src={clip.url} alt={clip.title} width={1200} height={800} unoptimized className="max-w-full max-h-[70vh] object-contain" />
               </div>
             );
           }
@@ -654,6 +674,15 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
               {processingJobs[clip.id] === 'enriching' ? 'AI整理中...' : 'このクリップを再度AI整理する'}
             </button>
           </div>
+
+          {/* コメントセクション（公開クリップのみ） */}
+          {clip.isGlobalSearch && <CommentSection clipId={id} />}
+
+          {!clip.isGlobalSearch && (
+            <p className="mt-6 text-xs text-on-surface-variant">
+              グローバル検索に公開するとコメントを受け付けられます。
+            </p>
+          )}
         </div>
       </div>
       {readEffect && (

@@ -34,6 +34,14 @@ function LibraryContent() {
   const [heroIndex, setHeroIndex] = useState(0);
   
   const [currentSort, setCurrentSort] = useState<'date' | 'saves'>('date');
+  const [showTypeFilter, setShowTypeFilter] = useState(false);
+
+  const setTypeFilter = (type: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (type === 'all') params.delete('type');
+    else params.set('type', type);
+    router.push(`/?${params.toString()}`);
+  };
 
   // Semantic Search States
   const [isSearchingAI, setIsSearchingAI] = useState(false);
@@ -113,6 +121,9 @@ function LibraryContent() {
 
   let filteredClips = clips.filter(clip => {
     let match = true;
+    // Hide archived clips unless explicitly viewing archived
+    if (currentFilter === 'archived') { if (!clip.isArchived) match = false; }
+    else { if (clip.isArchived) match = false; }
     if (showUnreadOnly && !clip.isUnread) match = false;
     if (currentFilter === 'unread' && !clip.isUnread) match = false; // keep legacy filter param working
     if (currentFilter === 'bookmarked' && !clip.isBookmarked) match = false;
@@ -295,11 +306,45 @@ function LibraryContent() {
             {currentSort === 'saves' && <span className="text-[10px] font-bold pr-0.5">保存数</span>}
           </button>
 
-          <button className="p-2 rounded-full bg-surface-container-low text-on-surface-variant border border-outline-variant/30 hover:bg-surface-container-high transition-colors">
+          <button
+            onClick={() => setShowTypeFilter(v => !v)}
+            className={clsx(
+              "p-2 rounded-full border transition-colors",
+              showTypeFilter || currentType
+                ? "bg-primary/10 text-primary border-primary/30"
+                : "bg-surface-container-low text-on-surface-variant border-outline-variant/30 hover:bg-surface-container-high"
+            )}
+          >
             <Filter className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      {showTypeFilter && (
+        <div className="flex flex-wrap gap-2 py-2 -mt-2 mb-2">
+          {[
+            { key: 'all', label: 'すべて' },
+            { key: 'url', label: '記事' },
+            { key: 'video', label: '動画' },
+            { key: 'image', label: '画像' },
+            { key: 'pdf', label: 'ドキュメント' },
+            { key: 'diary', label: '日記・メモ' },
+          ].map(f => (
+            <button
+              key={f.key}
+              onClick={() => setTypeFilter(f.key)}
+              className={clsx(
+                "px-3 py-1.5 rounded-full text-sm font-medium transition-all border",
+                (f.key === 'all' ? !currentType : currentType === f.key)
+                  ? "bg-primary text-on-primary border-primary"
+                  : "bg-surface-container-low text-on-surface-variant border-outline-variant/30 hover:bg-surface-container-high"
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {semanticSearchError && (
         <div className="mx-4 md:mx-8 mt-2 mb-0 px-4 py-2 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl text-sm border border-amber-500/20">

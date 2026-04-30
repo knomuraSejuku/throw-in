@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { AppShell } from '@/components/shell/AppShell';
-import { Search as SearchIcon, FileText, Loader2, Globe } from 'lucide-react';
+import { Search as SearchIcon, FileText, Loader2, Globe, ArrowDownUp, Clock, Tag, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import clsx from 'clsx';
@@ -42,6 +42,7 @@ interface DisplayClip {
   type: string;
   typeLabel: string;
   date: string;
+  createdAt?: string;
   tags?: string[];
   fileName?: string | null;
   fileSize?: string | null;
@@ -60,6 +61,7 @@ export default function SearchPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [selectedTag, setSelectedTag] = useState('');
   const [page, setPage] = useState(1);
 
   const [globalClips, setGlobalClips] = useState<DisplayClip[]>([]);
@@ -75,6 +77,7 @@ export default function SearchPage() {
     const params = new URLSearchParams();
     if (query) params.set('q', query);
     if (typeFilter !== 'all' && typeFilter !== 'bookmark') params.set('type', typeFilter);
+    if (selectedTag) params.set('tag', selectedTag);
 
     setGlobalLoading(true);
     fetch(`/api/search?${params}`)
@@ -88,7 +91,7 @@ export default function SearchPage() {
       })
       .catch(() => setGlobalClips([]))
       .finally(() => setGlobalLoading(false));
-  }, [authLoading, query, typeFilter]);
+  }, [authLoading, query, typeFilter, selectedTag]);
 
   const isLoading = authLoading || globalLoading;
 
@@ -97,7 +100,7 @@ export default function SearchPage() {
     const counts: Record<string, number> = {};
     source.forEach(c => c.tags?.forEach(t => { counts[t] = (counts[t] ?? 0) + 1; }));
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
-  }, [isAuthenticated, clips, globalClips]);
+  }, [globalClips]);
 
   const personalResults = useMemo((): DisplayClip[] => {
     if (!isAuthenticated) return [];
@@ -133,11 +136,28 @@ export default function SearchPage() {
     }));
   }, [isAuthenticated, clips, query, typeFilter, periodFilter, sortOrder]);
 
-  const results = globalClips;
+  const results = useMemo(() => {
+    const now = Date.now();
+    const period = PERIOD_FILTERS.find(p => p.key === periodFilter)!;
+    return [...globalClips]
+      .filter(c => {
+        if (period.ms === 0 || !c.createdAt) return true;
+        return new Date(c.createdAt).getTime() >= now - period.ms;
+      })
+      .sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return sortOrder === 'newest' ? bTime - aTime : aTime - bTime;
+      });
+  }, [globalClips, periodFilter, sortOrder]);
   const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
   const paged = results.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const handleSearch = () => { setQuery(inputValue); setPage(1); };
+  const clearSelectedTag = () => {
+    setSelectedTag('');
+    setPage(1);
+  };
 
   const visibleTypeFilters = TYPE_FILTERS.filter(f => f.key !== 'bookmark');
 
@@ -149,11 +169,11 @@ export default function SearchPage() {
         <section className="flex flex-col items-center space-y-6">
           <div className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
             <Globe className="w-3.5 h-3.5" />
-            みんなのクリップを検索中
+            みんなのクリップを検索
           </div>
 
           <h1 className="text-4xl md:text-[3.5rem] font-bold tracking-tight text-on-surface leading-tight text-center">
-            情報を<span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-tertiary">キュレート</span>する
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-tertiary">グローバルクリップ</span>
           </h1>
 
           <div className="w-full max-w-3xl relative group">
@@ -202,27 +222,93 @@ export default function SearchPage() {
 
           {/* Sidebar */}
           <aside className="lg:col-span-3">
-            <div className="bg-surface-container-lowest p-6 rounded-[32px] space-y-8 shadow-ambient">
-              {popularTags.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-outline mb-4">人気タグ</h3>
+            <div className="bg-surface-container-lowest p-5 rounded-[24px] space-y-6 shadow-ambient lg:sticky lg:top-24">
+              <div>
+                <div className="flex items-center gap-2 text-outline mb-4">
+                  <Tag className="w-4 h-4" />
+                  <h3 className="text-xs font-bold uppercase tracking-widest">人気タグ</h3>
+                </div>
+                {popularTags.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {popularTags.map(tag => (
                       <button
                         key={tag}
-                        onClick={() => { setInputValue(`#${tag}`); setQuery(tag); setPage(1); }}
-                        className="bg-secondary-container text-on-secondary-container px-3 py-1.5 rounded-full text-xs font-bold hover:opacity-80 transition-opacity"
+                        onClick={() => { setSelectedTag(tag); setPage(1); }}
+                        className={clsx(
+                          "px-3 py-1.5 rounded-full text-xs font-bold transition-colors",
+                          selectedTag === tag
+                            ? "bg-primary text-white"
+                            : "bg-secondary-container text-on-secondary-container hover:bg-secondary/20"
+                        )}
                       >
                         #{tag}
                       </button>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-xs text-outline/70 leading-relaxed">
+                    検索結果にタグがあると、ここからワンクリックで絞り込めます。
+                  </p>
+                )}
+                {selectedTag && (
+                  <button
+                    onClick={clearSelectedTag}
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:opacity-70"
+                  >
+                    <X className="w-3 h-3" />
+                    #{selectedTag} を解除
+                  </button>
+                )}
+              </div>
 
-              {!authLoading && popularTags.length === 0 && (
-                <p className="text-xs text-outline/60 text-center">タグなし</p>
-              )}
+              <div>
+                <div className="flex items-center gap-2 text-outline mb-3">
+                  <Clock className="w-4 h-4" />
+                  <h3 className="text-xs font-bold uppercase tracking-widest">期間</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {PERIOD_FILTERS.map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => { setPeriodFilter(key); setPage(1); }}
+                      className={clsx(
+                        "px-3 py-2 rounded-2xl text-xs font-bold transition-colors",
+                        periodFilter === key
+                          ? "bg-primary text-white"
+                          : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 text-outline mb-3">
+                  <ArrowDownUp className="w-4 h-4" />
+                  <h3 className="text-xs font-bold uppercase tracking-widest">並び順</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'newest', label: '新しい順' },
+                    { key: 'oldest', label: '古い順' },
+                  ].map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => { setSortOrder(key as 'newest' | 'oldest'); setPage(1); }}
+                      className={clsx(
+                        "px-3 py-2 rounded-2xl text-xs font-bold transition-colors",
+                        sortOrder === key
+                          ? "bg-primary text-white"
+                          : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </aside>
 
