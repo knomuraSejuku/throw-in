@@ -4,6 +4,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { X, Link as LinkIcon, Upload, Edit3, Tag as TagIcon, Plus, Loader2, CheckCircle, Globe, FileText } from 'lucide-react';
 import { useState, useRef, useEffect, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { CelebrationEffect } from '@/components/effects/CelebrationEffect';
 import clsx from 'clsx';
 import { useClipStore } from '@/lib/store';
@@ -78,6 +79,7 @@ function AddClipForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<'url' | 'upload' | 'diary' | 'csv'>('url');
+  const [isMounted, setIsMounted] = useState(false);
   
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -85,6 +87,10 @@ function AddClipForm() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [file, setFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   
   useEffect(() => {
     const sharedUrl = searchParams.get('url') || searchParams.get('text');
@@ -487,8 +493,8 @@ function AddClipForm() {
     }
   };
 
-  return (
-    <AppShell>
+  const modal = (
+    <>
       <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-on-surface/20 px-3 py-4 backdrop-blur-sm [height:100dvh] [height:100svh] md:p-6">
         <div className="relative flex min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-[28px] bg-surface-container-lowest shadow-2xl max-h-[calc(100svh-2rem)] md:max-h-[calc(100dvh-3rem)] md:flex-row md:rounded-[32px]">
           
@@ -843,6 +849,12 @@ function AddClipForm() {
 
       </div>
       {isSaved && <CelebrationEffect type="save" origin={saveOrigin} />}
+    </>
+  );
+
+  return (
+    <AppShell>
+      {isMounted ? createPortal(modal, document.body) : null}
     </AppShell>
   );
 }
