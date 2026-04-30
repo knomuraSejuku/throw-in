@@ -185,7 +185,7 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
               )}
             </div>
           </div>
-          <p className="text-sm font-bold text-on-surface truncate mt-1 pr-4">{clip.title}</p>
+          <p className="brand-title-wrap line-clamp-2 text-sm font-bold text-on-surface mt-1 pr-4">{clip.title}</p>
         </div>
       </div>
 
@@ -266,7 +266,7 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
           )}
         </div>
 
-        <h1 className="text-3xl md:text-4xl font-bold text-on-surface tracking-tight leading-snug mb-6">
+        <h1 className="brand-title-wrap text-3xl md:text-4xl font-bold text-on-surface tracking-tight leading-snug mb-6">
           {clip.title}
         </h1>
 

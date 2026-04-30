@@ -279,7 +279,7 @@ export default function UserPublicPage({ params }: { params: Promise<{ id: strin
                       clip.type === 'diary' && "bg-outline/10 text-outline"
                     )}>{clip.typeLabel}</span>
                   )}
-                  <h3 className="text-base font-bold text-on-surface line-clamp-2 leading-snug">{clip.title}</h3>
+                  <h3 className="brand-title-wrap text-base font-bold text-on-surface line-clamp-2 leading-snug">{clip.title}</h3>
                   {clip.summary && (
                     <p className="text-on-surface-variant text-sm line-clamp-2 leading-relaxed">{clip.summary}</p>
                   )}

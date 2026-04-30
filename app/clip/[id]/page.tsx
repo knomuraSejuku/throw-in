@@ -292,7 +292,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
           {/* Row 2: title */}
-          <p className="text-sm font-bold text-on-surface truncate mt-1 pr-4">{clip.title}</p>
+          <p className="brand-title-wrap line-clamp-2 text-sm font-bold text-on-surface mt-1 pr-4">{clip.title}</p>
         </div>
       </div>
 
@@ -432,7 +432,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
           ) : (
             <h1
               className={clsx(
-                "group text-3xl md:text-5xl font-bold text-on-surface tracking-tight leading-snug mb-6 flex items-start gap-3",
+                "brand-title-wrap group text-3xl md:text-5xl font-bold text-on-surface tracking-tight leading-snug mb-6 flex items-start gap-3",
                 canEditCanonicalClip && "cursor-pointer"
               )}
               onClick={() => {
@@ -441,7 +441,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
                 setEditingTitle(true);
               }}
             >
-              <span>{clip.title}</span>
+              <span className="brand-title-wrap min-w-0">{clip.title}</span>
               {canEditCanonicalClip && <Pencil className="w-5 h-5 mt-2 opacity-0 group-hover:opacity-40 shrink-0 transition-opacity" />}
             </h1>
           )}

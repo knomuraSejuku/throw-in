@@ -75,7 +75,7 @@ export default function BookmarksPage() {
                 )}
 
                 <h3 className={clsx(
-                  "text-lg font-bold mb-2 leading-tight line-clamp-2",
+                  "brand-title-wrap text-lg font-bold mb-2 leading-tight line-clamp-2",
                   clip.isUnread ? "text-on-surface" : "text-on-surface-variant"
                 )}>
                   {clip.title}

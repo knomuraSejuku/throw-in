@@ -136,6 +136,13 @@
     @apply text-sm text-on-surface-variant leading-relaxed;
   }
 
+  .brand-title-wrap {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   .brand-section-title {
     @apply flex items-center gap-2 text-base font-semibold text-on-surface leading-tight;
   }

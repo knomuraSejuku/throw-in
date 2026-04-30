@@ -172,7 +172,7 @@ export default function AdminClipsPage() {
                             <span className="text-xs text-on-surface-variant">{new Date(clip.created_at).toLocaleString('ja-JP')}</span>
                           </div>
                           <div>
-                            <h2 className="text-base font-bold leading-snug text-on-surface">{clip.title}</h2>
+                            <h2 className="brand-title-wrap text-base font-bold leading-snug text-on-surface">{clip.title}</h2>
                             <p className="mt-1 text-xs text-on-surface-variant">所有者: {ownerLabel(clip)}</p>
                             {clip.url && <p className="mt-1 truncate text-xs text-on-surface-variant">{clip.url}</p>}
                           </div>

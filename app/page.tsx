@@ -460,7 +460,7 @@ function LibraryContent() {
                     {filteredClips.map(clip => (
                       <tr key={clip.id} className="hover:bg-surface-container-low cursor-pointer transition-colors" onClick={() => router.push(`/clip/${clip.id}`)}>
                         <td className="px-6 py-4">
-                          <div className="font-bold text-on-surface mb-1">{clip.title}</div>
+                          <div className="brand-title-wrap font-bold text-on-surface mb-1">{clip.title}</div>
                           <div className="text-xs text-on-surface-variant flex items-center gap-2">
                             <span className={clsx("w-2 h-2 rounded-full", clip.isUnread ? "bg-primary" : "bg-outline-variant")}></span>
                             {clip.domain || clip.fileName || 'ノート'}
@@ -547,7 +547,7 @@ function LibraryContent() {
                       </span>
                       <span className="text-xs text-outline truncate">{clip.domain || clip.date}</span>
                     </div>
-                    <h3 className={clsx("text-base font-bold leading-tight truncate", clip.isUnread ? "text-on-surface" : "text-on-surface-variant")}>
+                    <h3 className={clsx("brand-title-wrap text-base font-bold leading-tight line-clamp-2", clip.isUnread ? "text-on-surface" : "text-on-surface-variant")}>
                       {clip.title}
                     </h3>
                   </div>
@@ -586,7 +586,7 @@ function LibraryContent() {
                           <span className="text-[10px] text-white/70">{new Date(heroClip.timestamp).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                           {heroClip.category && <span className="text-[10px] text-white/70">{heroClip.category}{heroClip.subcategory && ` › ${heroClip.subcategory}`}</span>}
                         </div>
-                        <h2 className="text-2xl md:text-3xl font-bold mb-3 tracking-tight leading-snug line-clamp-2 text-white">
+                        <h2 className="brand-title-wrap text-2xl md:text-3xl font-bold mb-3 tracking-tight leading-snug line-clamp-2 text-white">
                           {heroClip.title}
                         </h2>
                         {heroClip.tags && heroClip.tags.length > 0 && (
@@ -678,7 +678,7 @@ function LibraryContent() {
                       </div>
                     )}
 
-                    <h3 className={clsx("text-lg font-bold mb-2 leading-tight line-clamp-2", clip.isUnread ? "text-on-surface" : "text-on-surface-variant")}>
+                    <h3 className={clsx("brand-title-wrap text-lg font-bold mb-2 leading-tight line-clamp-2", clip.isUnread ? "text-on-surface" : "text-on-surface-variant")}>
                       {clip.title}
                     </h3>
 

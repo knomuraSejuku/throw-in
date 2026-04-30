@@ -100,7 +100,7 @@ export default function HistoryPage() {
                         {new Date(record.viewed_at).toLocaleString('ja-JP')} に閲覧
                       </span>
                    </div>
-                   <h3 className="text-base font-bold leading-tight truncate text-on-surface">
+                   <h3 className="brand-title-wrap line-clamp-2 text-base font-bold leading-tight text-on-surface">
                     {record.clip.title}
                    </h3>
                    <span className="text-xs text-outline truncate mt-1">{record.clip.source_domain || new Date(record.clip.created_at).toLocaleDateString('ja-JP')}</span>
