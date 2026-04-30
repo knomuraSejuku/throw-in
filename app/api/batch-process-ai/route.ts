@@ -4,11 +4,12 @@ import { cookies } from 'next/headers';
 
 export const runtime = 'nodejs';
 
-const MAX_AI_BATCH = 10;
+const MAX_AI_BATCH = 5;
+const DEFAULT_DEADLINE_MS = 45_000;
 
 type BatchAiResult = {
   clipId: string;
-  status: 'processed' | 'skipped' | 'failed';
+  status: 'processed' | 'skipped' | 'failed' | 'deferred';
   error?: string;
 };
 
@@ -49,7 +50,11 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json().catch(() => null);
-  const clipIds = Array.isArray(body?.clipIds) ? body.clipIds.map(String).slice(0, MAX_AI_BATCH) : [];
+  const requestedClipIds = Array.isArray(body?.clipIds) ? body.clipIds.map(String) : [];
+  const maxItems = Math.max(1, Math.min(Number(body?.maxItems) || MAX_AI_BATCH, MAX_AI_BATCH));
+  const deadlineMs = Math.max(5_000, Math.min(Number(body?.deadlineMs) || DEFAULT_DEADLINE_MS, DEFAULT_DEADLINE_MS));
+  const startedAt = Date.now();
+  const clipIds = requestedClipIds.slice(0, maxItems);
   if (clipIds.length === 0) return NextResponse.json({ error: 'clipIds required' }, { status: 400 });
 
   const { data: clips, error: clipsError } = await supabase
@@ -70,7 +75,15 @@ export async function POST(req: NextRequest) {
   const found = new Map((clips ?? []).map(clip => [clip.id, clip]));
   const results: BatchAiResult[] = [];
 
-  for (const clipId of clipIds) {
+  for (let index = 0; index < clipIds.length; index++) {
+    const clipId = clipIds[index];
+    if (Date.now() - startedAt > deadlineMs - 5_000) {
+      for (const deferredClipId of clipIds.slice(index)) {
+        results.push({ clipId: deferredClipId, status: 'deferred', error: 'Deadline reached before processing' });
+      }
+      break;
+    }
+
     const clip = found.get(clipId);
     if (!clip) {
       results.push({ clipId, status: 'failed', error: 'Clip not found' });
@@ -109,11 +122,28 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({
+  const summary = {
+    userId: user.id,
+    requested: requestedClipIds.length,
     total: results.length,
     processed: results.filter(result => result.status === 'processed').length,
     skipped: results.filter(result => result.status === 'skipped').length,
     failed: results.filter(result => result.status === 'failed').length,
+    deferred: results.filter(result => result.status === 'deferred').length,
+  };
+  const nextClipIds = requestedClipIds.slice(maxItems).concat(
+    results.filter(result => result.status === 'deferred').map(result => result.clipId)
+  );
+
+  console.info('[batch-process-ai:completed]', summary);
+
+  return NextResponse.json({
+    total: results.length,
+    processed: summary.processed,
+    skipped: summary.skipped,
+    failed: summary.failed,
+    deferred: summary.deferred,
+    nextClipIds,
     results,
   });
 }

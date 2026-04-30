@@ -228,11 +228,23 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({
+  const summary = {
+    userId: user.id,
+    requested: rawUrls.length,
     total: results.length,
     created: results.filter(result => result.status === 'created').length,
     skipped: results.filter(result => result.status === 'skipped').length,
     failed: results.filter(result => result.status === 'failed').length,
+  };
+
+  console.info('[batch-extract:completed]', summary);
+
+  return NextResponse.json({
+    requested: summary.requested,
+    total: summary.total,
+    created: summary.created,
+    skipped: summary.skipped,
+    failed: summary.failed,
     results,
   });
 }

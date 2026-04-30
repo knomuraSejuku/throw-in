@@ -53,6 +53,27 @@ const chunkArray = <T,>(items: T[], size: number): T[][] => {
   return chunks;
 };
 
+const CSV_IMPORT_DRAFT_KEY = 'throwin:csv-import-draft';
+
+type CsvBatchResult = {
+  url: string;
+  normalizedUrl?: string;
+  status: 'created' | 'skipped' | 'failed';
+  clipId?: string;
+  title?: string;
+  body?: string | null;
+  error?: string;
+  reason?: 'duplicate' | 'invalid_url';
+};
+
+const csvResultLabel = (result: CsvBatchResult) => {
+  if (result.status === 'created') return '保存済み';
+  if (result.reason === 'duplicate') return '重複のためスキップ';
+  if (result.reason === 'invalid_url') return 'URL形式エラー';
+  if (result.status === 'skipped') return 'スキップ';
+  return result.error || '保存失敗';
+};
+
 function AddClipForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -96,7 +117,21 @@ function AddClipForm() {
   const [csvUrls, setCsvUrls] = useState<string[]>([]);
   const [csvProgress, setCsvProgress] = useState<{ done: number; total: number } | null>(null);
   const [csvAiProgress, setCsvAiProgress] = useState<{ done: number; total: number } | null>(null);
-  const [csvResults, setCsvResults] = useState<{ url: string; success: boolean; error?: string }[]>([]);
+  const [csvResults, setCsvResults] = useState<CsvBatchResult[]>([]);
+
+  useEffect(() => {
+    const savedDraft = localStorage.getItem(CSV_IMPORT_DRAFT_KEY);
+    if (!savedDraft) return;
+    try {
+      const parsed = JSON.parse(savedDraft) as { urls?: string[]; results?: CsvBatchResult[] };
+      if (Array.isArray(parsed.urls) && parsed.urls.length > 0) {
+        setCsvUrls(parsed.urls.slice(0, 200));
+        setCsvResults(Array.isArray(parsed.results) ? parsed.results : []);
+      }
+    } catch {
+      localStorage.removeItem(CSV_IMPORT_DRAFT_KEY);
+    }
+  }, []);
 
   const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setErrorMsg('');
@@ -110,6 +145,7 @@ function AddClipForm() {
       setCsvResults([]);
       setCsvProgress(null);
       setCsvAiProgress(null);
+      localStorage.setItem(CSV_IMPORT_DRAFT_KEY, JSON.stringify({ urls, results: [] }));
     };
     reader.readAsText(f);
   };
@@ -121,15 +157,10 @@ function AddClipForm() {
     setCsvResults([]);
     setCsvProgress({ done: 0, total: csvUrls.length });
     setCsvAiProgress(null);
+    localStorage.setItem(CSV_IMPORT_DRAFT_KEY, JSON.stringify({ urls: csvUrls, results: [] }));
 
     try {
-      const allResults: Array<{
-        url: string;
-        status: 'created' | 'skipped' | 'failed';
-        clipId?: string;
-        error?: string;
-        reason?: string;
-      }> = [];
+      const allResults: CsvBatchResult[] = [];
 
       for (const chunk of chunkArray(csvUrls, 10)) {
         const res = await fetch('/api/batch-extract', {
@@ -143,13 +174,10 @@ function AddClipForm() {
           throw new Error(data?.error || `一括保存に失敗しました (${res.status})`);
         }
 
-        const chunkResults = (data?.results ?? []) as typeof allResults;
+        const chunkResults = (data?.results ?? []) as CsvBatchResult[];
         allResults.push(...chunkResults);
-        setCsvResults(allResults.map(result => ({
-          url: result.url,
-          success: result.status !== 'failed',
-          error: result.status === 'skipped' ? '重複のためスキップ' : result.error,
-        })));
+        setCsvResults([...allResults]);
+        localStorage.setItem(CSV_IMPORT_DRAFT_KEY, JSON.stringify({ urls: csvUrls, results: allResults }));
         setCsvProgress({ done: Math.min(allResults.length, csvUrls.length), total: csvUrls.length });
       }
 
@@ -161,8 +189,11 @@ function AddClipForm() {
 
       if (aiTargets.length > 0) {
         let done = 0;
+        const queue = [...aiTargets];
+        const attempts = new Map<string, number>();
         setCsvAiProgress({ done, total: aiTargets.length });
-        for (const chunk of chunkArray(aiTargets, 5)) {
+        while (queue.length > 0) {
+          const chunk = queue.splice(0, 5);
           const res = await fetch('/api/batch-process-ai', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -170,13 +201,27 @@ function AddClipForm() {
           });
           if (!res.ok) {
             console.warn('Batch AI processing failed', await readApiError(res));
+            done += chunk.length;
+          } else {
+            const data = await res.json().catch(() => null);
+            const deferredIds = ((data?.results ?? []) as Array<{ clipId: string; status: string }>)
+              .filter(result => result.status === 'deferred')
+              .map(result => result.clipId);
+            const deferred = new Set(deferredIds);
+            done += chunk.filter(clipId => !deferred.has(clipId)).length;
+            for (const clipId of deferredIds) {
+              const count = (attempts.get(clipId) ?? 0) + 1;
+              attempts.set(clipId, count);
+              if (count <= 2) queue.push(clipId);
+              else done += 1;
+            }
           }
-          done += chunk.length;
           setCsvAiProgress({ done: Math.min(done, aiTargets.length), total: aiTargets.length });
         }
       }
 
       await useClipStore.getState().fetchClips();
+      localStorage.removeItem(CSV_IMPORT_DRAFT_KEY);
     } catch (error) {
       setErrorMsg(error instanceof Error ? error.message : '一括保存に失敗しました。');
     } finally {
@@ -613,20 +658,27 @@ function AddClipForm() {
                   </div>
                   {csvUrls.length > 0 && (
                     <div className="rounded-2xl bg-surface-container-low p-4 space-y-2">
-                      <p className="text-xs font-bold text-on-surface-variant">{csvUrls.length}件のURL</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-bold text-on-surface-variant">{csvUrls.length}件のURL</p>
+                        {csvResults.some(result => result.status === 'failed') && (
+                          <p className="text-[10px] text-outline">再実行で失敗分を再試行できます</p>
+                        )}
+                      </div>
                       <div className="max-h-48 overflow-y-auto space-y-1">
-                        {(csvResults.length > 0 ? csvResults : csvUrls.map(url => ({ url, success: false, error: undefined }))).map((result, i) => {
+                        {(csvResults.length > 0 ? csvResults : csvUrls.map(url => ({ url, status: 'skipped' as const }))).map((result, i) => {
                           return (
                             <div key={i} className="flex items-center gap-2 text-xs">
                               {csvResults.length > 0 ? (
-                                result.success
+                                result.status === 'created'
                                   ? <CheckCircle className="w-3 h-3 text-success shrink-0" />
-                                  : <X className="w-3 h-3 text-error shrink-0" />
+                                  : result.status === 'failed'
+                                    ? <X className="w-3 h-3 text-error shrink-0" />
+                                    : <div className="w-3 h-3 rounded-full bg-outline shrink-0" />
                               ) : (
                                 <div className="w-3 h-3 rounded-full bg-outline-variant/40 shrink-0" />
                               )}
-                              <span className={clsx("truncate", csvResults.length > 0 && result.success === false && "text-error")}>{result.url}</span>
-                              {result.error && <span className="shrink-0 text-[10px] text-outline">{result.error}</span>}
+                              <span className={clsx("truncate", csvResults.length > 0 && result.status === 'failed' && "text-error")}>{result.url}</span>
+                              {csvResults.length > 0 && <span className="shrink-0 text-[10px] text-outline">{csvResultLabel(result)}</span>}
                             </div>
                           );
                         })}

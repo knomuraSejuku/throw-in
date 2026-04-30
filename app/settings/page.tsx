@@ -20,6 +20,22 @@ const chunkArray = <T,>(items: T[], size: number): T[][] => {
   return chunks;
 };
 
+type XImportDetail = {
+  fileName: string;
+  status: 'created' | 'skipped' | 'failed';
+  clipId?: string;
+  url?: string;
+  body?: string;
+  error?: string;
+  reason?: 'duplicate' | 'missing_url' | 'unsupported_zip_entry';
+};
+
+const xImportReasonLabel: Record<string, string> = {
+  duplicate: '重複',
+  missing_url: 'URLなし',
+  unsupported_zip_entry: 'ZIP未対応',
+};
+
 export default function SettingsPage() {
   const { user } = useAuthStore();
   const supabase = createClient();
@@ -44,6 +60,7 @@ export default function SettingsPage() {
   const [xImportProgress, setXImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [xImportAiProgress, setXImportAiProgress] = useState<{ done: number; total: number } | null>(null);
   const [xImportResults, setXImportResults] = useState<{ ok: number; skipped: number; fail: number } | null>(null);
+  const [xImportDetails, setXImportDetails] = useState<XImportDetail[]>([]);
   const [isXImporting, setIsXImporting] = useState(false);
 
   const EMOJI_OPTIONS = ['🙂','😎','🤖','🦊','🐧','🐸','🦁','🐼','🌸','⚡','🎯','🚀','🎨','📚','🎵','🌍'];
@@ -127,7 +144,12 @@ export default function SettingsPage() {
 
   const handleInstall = async () => {
     if (!deferredPrompt.current) {
-      alert('ブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選んでください。Chromeで条件を満たすと、このボタンから直接インストールできます。');
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || ((navigator as Navigator & { platform?: string }).platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) {
+        alert('iOS Safariでは共有ボタンから「ホーム画面に追加」を選んでください。追加後はホーム画面のアイコンから起動できます。');
+      } else {
+        alert('ブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選んでください。Chromeで条件を満たすと、このボタンから直接インストールできます。');
+      }
       return;
     }
     deferredPrompt.current.prompt();
@@ -159,6 +181,7 @@ export default function SettingsPage() {
     const files = Array.from(e.target.files ?? []).filter(f => /\.(md|zip)$/i.test(f.name));
     setXImportFiles(files);
     setXImportResults(null);
+    setXImportDetails([]);
     setXImportProgress(null);
     setXImportAiProgress(null);
   };
@@ -168,13 +191,10 @@ export default function SettingsPage() {
     setIsXImporting(true);
     setXImportProgress({ done: 0, total: xImportFiles.length });
     setXImportAiProgress(null);
+    setXImportDetails([]);
 
     try {
-      const allResults: Array<{
-        status: 'created' | 'skipped' | 'failed';
-        clipId?: string;
-        body?: string;
-      }> = [];
+      const allResults: XImportDetail[] = [];
 
       let uploaded = 0;
       const fileChunks = xImportFiles.some(file => file.name.toLowerCase().endsWith('.zip'))
@@ -191,7 +211,8 @@ export default function SettingsPage() {
         });
         const data = await res.json().catch(() => null);
         if (!res.ok) throw new Error(data?.error || `インポートに失敗しました (${res.status})`);
-        allResults.push(...((data?.results ?? []) as typeof allResults));
+        allResults.push(...((data?.results ?? []) as XImportDetail[]));
+        setXImportDetails([...allResults]);
         uploaded += files.length;
         setXImportProgress({ done: Math.min(uploaded, xImportFiles.length), total: xImportFiles.length });
         setXImportResults({
@@ -213,15 +234,33 @@ export default function SettingsPage() {
         .filter(result => result.status === 'created' && result.clipId)
         .map(result => result.clipId!);
       if (aiTargets.length > 0) {
+        const queue = [...aiTargets];
+        const attempts = new Map<string, number>();
         setXImportAiProgress({ done, total: aiTargets.length });
-        for (const chunk of chunkArray(aiTargets, 5)) {
+        while (queue.length > 0) {
+          const chunk = queue.splice(0, 5);
           const res = await fetch('/api/batch-process-ai', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ clipIds: chunk }),
           });
-          if (!res.ok) console.warn('X import AI batch failed', await res.text().catch(() => ''));
-          done += chunk.length;
+          if (!res.ok) {
+            console.warn('X import AI batch failed', await res.text().catch(() => ''));
+            done += chunk.length;
+          } else {
+            const data = await res.json().catch(() => null);
+            const deferredIds = ((data?.results ?? []) as Array<{ clipId: string; status: string }>)
+              .filter(result => result.status === 'deferred')
+              .map(result => result.clipId);
+            const deferred = new Set(deferredIds);
+            done += chunk.filter(clipId => !deferred.has(clipId)).length;
+            for (const clipId of deferredIds) {
+              const count = (attempts.get(clipId) ?? 0) + 1;
+              attempts.set(clipId, count);
+              if (count <= 2) queue.push(clipId);
+              else done += 1;
+            }
+          }
           setXImportAiProgress({ done: Math.min(done, aiTargets.length), total: aiTargets.length });
         }
       }
@@ -527,11 +566,33 @@ export default function SettingsPage() {
               </div>
             )}
             {xImportResults && (
-              <div className="flex items-center gap-2 text-sm">
-                <CheckCircle className="w-4 h-4 text-success" />
-                <span className="text-on-surface font-bold">{xImportResults.ok}件保存</span>
-                {xImportResults.skipped > 0 && <span className="text-outline">{xImportResults.skipped}件スキップ</span>}
-                {xImportResults.fail > 0 && <span className="text-error">{xImportResults.fail}件失敗</span>}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle className="w-4 h-4 text-success" />
+                  <span className="text-on-surface font-bold">{xImportResults.ok}件保存</span>
+                  {xImportResults.skipped > 0 && <span className="text-outline">{xImportResults.skipped}件スキップ</span>}
+                  {xImportResults.fail > 0 && <span className="text-error">{xImportResults.fail}件失敗</span>}
+                </div>
+                {xImportDetails.some(result => result.status !== 'created') && (
+                  <div className="max-h-44 overflow-y-auto rounded-2xl bg-surface-container-low p-3 space-y-1">
+                    {xImportDetails.filter(result => result.status !== 'created').map((result, index) => (
+                      <div key={`${result.fileName}-${index}`} className="flex items-start gap-2 text-xs">
+                        {result.status === 'failed'
+                          ? <XIcon className="mt-0.5 w-3.5 h-3.5 text-error shrink-0" />
+                          : <div className="mt-1.5 w-2 h-2 rounded-full bg-outline shrink-0" />}
+                        <div className="min-w-0">
+                          <p className={clsx('truncate font-medium', result.status === 'failed' ? 'text-error' : 'text-on-surface-variant')}>
+                            {result.fileName}
+                          </p>
+                          <p className="text-outline truncate">
+                            {result.error || (result.reason ? xImportReasonLabel[result.reason] : 'スキップ')}
+                            {result.url ? ` / ${result.url}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </section>

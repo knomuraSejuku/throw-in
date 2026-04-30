@@ -26,6 +26,14 @@ const anonClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
+const notificationClient = process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+  : null;
+
 type CommentRow = {
   id: string;
   content: string;
@@ -39,6 +47,44 @@ type UserProfile = {
   display_name: string | null;
   avatar_emoji: string | null;
 };
+
+type NotificationType = 'comment_on_clip' | 'comment_reply' | 'like';
+
+async function shouldCreateNotification(userId: string, type: NotificationType) {
+  const { data } = await anonClient
+    .from('users')
+    .select('notification_prefs')
+    .eq('id', userId)
+    .maybeSingle();
+
+  const prefs = data?.notification_prefs as Record<string, unknown> | null | undefined;
+  if (!prefs) return true;
+  if (type === 'like') return prefs.like !== false;
+  if (type === 'comment_reply') return prefs.comment_reply !== false;
+  return prefs.comment_on_clip !== false && prefs.comment_reply !== false;
+}
+
+async function createNotification(params: { userId: string; type: NotificationType; data: Record<string, unknown> }) {
+  if (!notificationClient) {
+    console.warn('[comments:notification_skipped]', { reason: 'missing_service_role', type: params.type, userId: params.userId });
+    return;
+  }
+
+  if (!(await shouldCreateNotification(params.userId, params.type))) {
+    console.info('[comments:notification_pref_skipped]', { type: params.type, userId: params.userId });
+    return;
+  }
+
+  const { error } = await notificationClient.from('notifications').insert({
+    user_id: params.userId,
+    type: params.type,
+    data: params.data,
+  });
+
+  if (error) {
+    console.error('[comments:notification_failed]', { type: params.type, userId: params.userId, error: error.message });
+  }
+}
 
 // GET /api/comments?clipId=xxx — list comments with like counts + current user's likes
 export async function GET(req: NextRequest) {
@@ -165,8 +211,8 @@ export async function POST(req: NextRequest) {
     const notifyUserId = parentCommentUserId ?? clip.user_id;
 
     if (notifyUserId && notifyUserId !== user.id) {
-      await supabase.from('notifications').insert({
-        user_id: notifyUserId,
+      await createNotification({
+        userId: notifyUserId,
         type: parentId ? 'comment_reply' : 'comment_on_clip',
         data: { comment_id: comment.id, actor_id: user.id, clip_id: clipId },
       });
@@ -189,6 +235,15 @@ export async function POST(req: NextRequest) {
   if (action === 'like') {
     if (!commentId) return NextResponse.json({ error: 'commentId required' }, { status: 400 });
 
+    const { data: targetComment, error: commentError } = await anonClient
+      .from('clip_comments')
+      .select('id, user_id, clip_id')
+      .eq('id', commentId)
+      .maybeSingle();
+
+    if (commentError) return NextResponse.json({ error: commentError.message }, { status: 500 });
+    if (!targetComment) return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
+
     const { data: existing } = await supabase
       .from('comment_likes')
       .select('user_id')
@@ -200,7 +255,16 @@ export async function POST(req: NextRequest) {
       await supabase.from('comment_likes').delete().eq('user_id', user.id).eq('comment_id', commentId);
       return NextResponse.json({ liked: false });
     } else {
-      await supabase.from('comment_likes').insert({ user_id: user.id, comment_id: commentId });
+      const { error } = await supabase.from('comment_likes').insert({ user_id: user.id, comment_id: commentId });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+      if (targetComment.user_id !== user.id) {
+        await createNotification({
+          userId: targetComment.user_id,
+          type: 'like',
+          data: { comment_id: commentId, actor_id: user.id, clip_id: targetComment.clip_id },
+        });
+      }
       return NextResponse.json({ liked: true });
     }
   }

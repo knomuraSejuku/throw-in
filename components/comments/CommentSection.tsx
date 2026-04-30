@@ -28,6 +28,8 @@ export function CommentSection({ clipId, enabled = true, className }: {
   const [commentError, setCommentError] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
+  const [likingIds, setLikingIds] = useState<Set<string>>(new Set());
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   const fetchComments = useCallback(() => {
     if (!enabled) return;
@@ -48,48 +50,110 @@ export function CommentSection({ clipId, enabled = true, className }: {
   async function handlePostComment() {
     if (!user || !commentText.trim() || posting) return;
     setPosting(true);
-    const res = await fetch('/api/comments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'post', clipId, content: commentText.trim(), parentId: replyTo }),
-    });
-    setPosting(false);
-    if (res.ok) {
-      const data = await res.json().catch(() => null);
-      if (data?.comment) {
-        setComments(prev => [...prev.filter(c => c.id !== data.comment.id), data.comment]);
+    const previousText = commentText;
+    const previousReplyTo = replyTo;
+
+    try {
+      const res = await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'post', clipId, content: previousText.trim(), parentId: previousReplyTo }),
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.comment) {
+          setComments(prev => [...prev.filter(c => c.id !== data.comment.id), data.comment]);
+        }
+        setCommentText('');
+        setReplyTo(null);
+        setCommentError(null);
+        fetchComments();
+      } else {
+        const data = await res.json().catch(() => null);
+        setCommentText(previousText);
+        setReplyTo(previousReplyTo);
+        setCommentError(data?.error ?? 'コメントの投稿に失敗しました。');
       }
-      setCommentText('');
-      setReplyTo(null);
-      setCommentError(null);
-      fetchComments();
-    } else {
-      const data = await res.json().catch(() => null);
-      setCommentError(data?.error ?? 'コメントの投稿に失敗しました。');
+    } catch {
+      setCommentText(previousText);
+      setReplyTo(previousReplyTo);
+      setCommentError('コメントの投稿に失敗しました。通信状態を確認してください。');
+    } finally {
+      setPosting(false);
     }
   }
 
   async function handleLike(commentId: string) {
-    if (!user) return;
-    setComments(prev => prev.map(c => c.id === commentId
+    if (!user || likingIds.has(commentId)) return;
+    let previousComments: Comment[] = [];
+    setLikingIds(prev => new Set(prev).add(commentId));
+    setComments(prev => {
+      previousComments = prev;
+      return prev.map(c => c.id === commentId
       ? { ...c, likedByMe: !c.likedByMe, likeCount: c.likedByMe ? c.likeCount - 1 : c.likeCount + 1 }
       : c
-    ));
-    await fetch('/api/comments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'like', commentId }),
+      );
     });
+
+    try {
+      const res = await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'like', commentId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setComments(previousComments);
+        setCommentError(data?.error ?? 'いいねの更新に失敗しました。');
+      } else {
+        setCommentError(null);
+      }
+    } catch {
+      setComments(previousComments);
+      setCommentError('いいねの更新に失敗しました。通信状態を確認してください。');
+    } finally {
+      setLikingIds(prev => {
+        const next = new Set(prev);
+        next.delete(commentId);
+        return next;
+      });
+    }
   }
 
   async function handleDeleteComment(commentId: string) {
-    if (!user) return;
-    await fetch('/api/comments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', commentId }),
+    if (!user || deletingIds.has(commentId)) return;
+    let previousComments: Comment[] = [];
+    setDeletingIds(prev => new Set(prev).add(commentId));
+    setComments(prev => {
+      previousComments = prev;
+      return prev.filter(c => c.id !== commentId && c.parent_id !== commentId);
     });
-    fetchComments();
+
+    try {
+      const res = await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', commentId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setComments(previousComments);
+        setCommentError(data?.error ?? 'コメントの削除に失敗しました。');
+      } else {
+        setCommentError(null);
+        fetchComments();
+      }
+    } catch {
+      setComments(previousComments);
+      setCommentError('コメントの削除に失敗しました。通信状態を確認してください。');
+    } finally {
+      setDeletingIds(prev => {
+        const next = new Set(prev);
+        next.delete(commentId);
+        return next;
+      });
+    }
   }
 
   const topLevel = comments.filter(c => !c.parent_id);
@@ -110,6 +174,12 @@ export function CommentSection({ clipId, enabled = true, className }: {
         </p>
       )}
 
+      {topLevel.length === 0 && !commentError && (
+        <div className="rounded-2xl border border-dashed border-outline-variant/30 bg-surface-container-low px-4 py-5 text-sm text-on-surface-variant">
+          まだコメントはありません。
+        </div>
+      )}
+
       {topLevel.map(c => (
         <div key={c.id} className="space-y-2">
           <CommentItem
@@ -119,6 +189,8 @@ export function CommentSection({ clipId, enabled = true, className }: {
             onDelete={handleDeleteComment}
             onReply={setReplyTo}
             isReplyTarget={replyTo === c.id}
+            isLiking={likingIds.has(c.id)}
+            isDeleting={deletingIds.has(c.id)}
           />
           {replies(c.id).map(r => (
             <div key={r.id} className="ml-8">
@@ -129,6 +201,8 @@ export function CommentSection({ clipId, enabled = true, className }: {
                 onDelete={handleDeleteComment}
                 onReply={() => {}}
                 isReplyTarget={false}
+                isLiking={likingIds.has(r.id)}
+                isDeleting={deletingIds.has(r.id)}
               />
             </div>
           ))}
@@ -181,13 +255,15 @@ export function CommentSection({ clipId, enabled = true, className }: {
   );
 }
 
-function CommentItem({ comment, userId, onLike, onDelete, onReply, isReplyTarget }: {
+function CommentItem({ comment, userId, onLike, onDelete, onReply, isReplyTarget, isLiking, isDeleting }: {
   comment: Comment;
   userId: string | undefined;
   onLike: (id: string) => void;
   onDelete: (id: string) => void;
   onReply: (id: string) => void;
   isReplyTarget: boolean;
+  isLiking: boolean;
+  isDeleting: boolean;
 }) {
   const isOwn = userId === comment.user_id;
   const relTime = new Date(comment.created_at).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -208,7 +284,7 @@ function CommentItem({ comment, userId, onLike, onDelete, onReply, isReplyTarget
           <div className="flex items-center gap-3 mt-2">
             <button
               onClick={() => onLike(comment.id)}
-              disabled={!userId}
+              disabled={!userId || isLiking}
               className={clsx('flex items-center gap-1 text-xs transition-colors disabled:opacity-40',
                 comment.likedByMe ? 'text-error' : 'text-on-surface-variant hover:text-error'
               )}
@@ -224,9 +300,9 @@ function CommentItem({ comment, userId, onLike, onDelete, onReply, isReplyTarget
               </button>
             )}
             {isOwn && (
-              <button onClick={() => onDelete(comment.id)}
-                className="flex items-center gap-1 text-xs text-on-surface-variant hover:text-error transition-colors ml-auto">
-                <Trash2 className="w-3.5 h-3.5" />
+              <button onClick={() => onDelete(comment.id)} disabled={isDeleting}
+                className="flex items-center gap-1 text-xs text-on-surface-variant hover:text-error transition-colors ml-auto disabled:opacity-40">
+                {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
               </button>
             )}
           </div>

@@ -258,11 +258,25 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({
+  const summary = {
+    userId: user.id,
+    uploadedFiles: uploadedFiles.length,
+    parsedFiles: limitedFiles.length,
     total: results.length,
     created: results.filter(result => result.status === 'created').length,
     skipped: results.filter(result => result.status === 'skipped').length,
     failed: results.filter(result => result.status === 'failed').length,
+  };
+
+  console.info('[import-x-bookmarks:completed]', summary);
+
+  return NextResponse.json({
+    uploadedFiles: summary.uploadedFiles,
+    parsedFiles: summary.parsedFiles,
+    total: summary.total,
+    created: summary.created,
+    skipped: summary.skipped,
+    failed: summary.failed,
     results,
   });
 }
