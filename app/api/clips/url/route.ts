@@ -96,39 +96,6 @@ async function extractUrl(origin: string, normalizedUrl: string) {
   return extractedData;
 }
 
-async function processCreatedClip(req: NextRequest, clipId: string, content: string, clipTitle: string) {
-  if (!content.trim() || content.trim().length <= 10) {
-    return { processed: false, error: 'No content for AI processing' };
-  }
-
-  try {
-    const response = await fetch(`${req.nextUrl.origin}/api/process-ai`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        cookie: req.headers.get('cookie') || '',
-      },
-      body: JSON.stringify({
-        clipId,
-        content,
-        existingTags: [],
-        clipTitle,
-      }),
-    });
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      console.warn('[clips:url:ai_failed]', { clipId, status: response.status, detail: detail.slice(0, 500) });
-      return { processed: false, error: detail.slice(0, 200) || response.statusText };
-    }
-
-    return { processed: true, error: null };
-  } catch (error) {
-    console.warn('[clips:url:ai_failed]', { clipId, error: error instanceof Error ? error.message : String(error) });
-    return { processed: false, error: error instanceof Error ? error.message : String(error) };
-  }
-}
-
 export async function POST(req: NextRequest) {
   const { supabase, user } = await getAuthedSupabase();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -152,13 +119,11 @@ export async function POST(req: NextRequest) {
   let clipId: string | null = null;
   let created = false;
   let bodyForAi = '';
-  let aiProcessed = false;
-  let aiError: string | null = null;
   let savedTitle = titleOverride;
 
   const { data: existing } = await lookup
     .from('clips')
-    .select('id, summary')
+    .select('id, title, extracted_content, summary, source_domain, preview_image_url')
     .eq('normalized_url', normalizedUrl)
     .in('content_type', ['article', 'video'])
     .order('created_at', { ascending: true })
@@ -167,6 +132,30 @@ export async function POST(req: NextRequest) {
 
   if (existing) {
     clipId = existing.id;
+    bodyForAi = existing.extracted_content || '';
+    savedTitle = existing.title || titleOverride;
+
+    if (!bodyForAi.trim()) {
+      try {
+        const extractedData = await extractUrl(req.nextUrl.origin, normalizedUrl);
+        const extractedBody = extractedData?.body || extractedData?.description || '';
+        if (extractedBody.trim()) {
+          bodyForAi = extractedBody;
+          savedTitle = existing.title || titleOverride || deriveReadableTitle(extractedData?.title, extractedBody, normalizedUrl);
+          await lookup
+            .from('clips')
+            .update({
+              title: existing.title || savedTitle,
+              source_domain: existing.source_domain || extractedData?.domain || new URL(normalizedUrl).hostname,
+              preview_image_url: existing.preview_image_url || extractedData?.thumbnail || null,
+              extracted_content: extractedBody,
+            })
+            .eq('id', clipId);
+        }
+      } catch (error) {
+        console.warn('[clips:url:existing_extract_failed]', { clipId, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
   } else {
     let extractedData: Awaited<ReturnType<typeof extractUrl>> = null;
     try {
@@ -221,11 +210,5 @@ export async function POST(req: NextRequest) {
     })));
   }
 
-  if (created && clipId) {
-    const ai = await processCreatedClip(req, clipId, bodyForAi, savedTitle);
-    aiProcessed = ai.processed;
-    aiError = ai.error;
-  }
-
-  return NextResponse.json({ clipId, created, normalizedUrl, body: aiProcessed ? null : bodyForAi || null, aiProcessed, aiError });
+  return NextResponse.json({ clipId, created, normalizedUrl, body: bodyForAi || note || null, title: savedTitle });
 }

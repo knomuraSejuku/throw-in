@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
       const saved = await saveRes.json().catch(() => null);
       if (!saveRes.ok) throw new Error(saved?.error || '保存に失敗しました。');
 
-      return redirectWithStatus(req, saved.created ? 'saved' : 'duplicate', undefined, saved.aiProcessed ? undefined : saved.clipId);
+      return redirectWithStatus(req, saved.created ? 'saved' : 'duplicate', undefined, saved.clipId);
     }
 
     if (sharedText) {
