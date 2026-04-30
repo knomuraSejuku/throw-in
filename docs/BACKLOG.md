@@ -867,6 +867,43 @@
   - ファイル: `app/clip/[id]/page.tsx`, `app/api/clips/[id]/route.ts`, `lib/store.ts`, `supabase/*.sql`
 
 ### レスポンシブ・ナビゲーション・コメント修正
+- [?] **K19** ブランド表層リフレッシュ（元デザインへ戻せる範囲で実施）
+  - **ユーザー要望:** 現行Throw Inのブランドイメージを、添付ブランドキット/`ThrowIn_DESIGN.md` の方向へ寄せる。ただしAppShellやUIUXの大幅刷新は避け、元のデザインに戻せることを大前提にする
+  - **復元ポイント:** 変更前コミットにローカルタグ `throwin-pre-brand-surface-20260430` を作成済み
+  - **スコープ:**
+    1. 色: Warm White / Ink Black / Charcoal Gray / Mist Gray中心へ変更し、青紫グラデーション感を減らす
+    2. フォント: Inter + Noto Sans JP系へ寄せ、ロゴ用の強い書体依存を弱める
+    3. 線/影: 薄い線、軽い影、余白を活かす方向へ調整
+    4. ロゴ/イラスト: Image Genで「投げる人 + 放物線 + 箱」のラフ資産を生成し、まずはPWAアイコン/ログイン/ヘッダーの差し替え候補にする
+    5. コピー: 「AIがすごい」より「投げ入れる」「あとで探せる」「整理される」へ寄せる
+  - **非スコープ:**
+    - AppShell構造の作り替え
+    - ナビゲーション動線の大幅変更
+    - 主要画面の情報設計変更
+    - DB/API/状態管理の変更
+  - **進め方:**
+    1. 既存デザイン資産とCSSトークンを棚卸し
+    2. 生成画像は新規ファイルとして追加し、既存アイコンを上書きする場合も復元しやすい差分にする
+    3. CSSトークンを中心に色・フォント・線・影を変更
+    4. ログイン/ヘッダー/manifestのコピーとブランド表現を最小変更
+    5. `npm run build` / `npm run check` で検証
+  - **受け入れ条件:**
+    - 元デザインへ `git revert` またはタグ比較で戻せる
+    - 現行の操作導線・AppShell構造は維持される
+    - 主要画面の印象が、青紫AI/SaaS感から、白地・細線・余白・静かな整理感へ寄る
+    - PWAアイコン/manifest/theme colorが新ブランド方向に揃う
+  - **実施済み（2026-04-30）:**
+    - Image Genで「投げる人 + 放物線 + 箱」のモノクロ線画アイコンを生成
+    - 生成元を `public/brand/throwin-symbol-source.png` に保存し、PWA用 `public/icons/app-icon-192.png` / `public/icons/app-icon-512.png` を差し替え
+    - `app/globals.css` の色・影・線をWarm White / Ink Black / Charcoal Gray / Mist Gray中心へ変更
+    - フォントを `Inter` + `Noto Sans JP` に寄せ、強いロゴ書体依存を外した
+    - ログイン画面、サイドバー、モバイルヘッダーのロゴ/コピーを新ブランド方向へ変更
+    - `app/manifest.ts` / metadataの説明文とtheme colorを更新
+  - **確認待ち:**
+    - 生成アイコンの絵柄・線の太さ・人物モチーフがブランドとして採用できるか
+    - 白地/黒線中心の全体トーンが日常利用アプリとして硬すぎないか
+  - ファイル: `app/globals.css`, `app/layout.tsx`, `app/manifest.ts`, `app/login/page.tsx`, `components/shell/*`, `public/icons/*`, `docs/BACKLOG.md`
+
 - [ ] **K11** 全画面サイズ対応の徹底調査とUI崩れ修正
   - **ユーザー要望:** スマホ、タブレット、PC、あらゆる画面サイズに綺麗に対応しきれているか徹底調査し、崩れ・はみ出し・美的調整をタスク化して修正実装する
   - **調査対象画面:**

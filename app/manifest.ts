@@ -4,11 +4,11 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Throw In',
     short_name: 'Throw In',
-    description: '気になる情報を保存し、整理し、あとで見返せる個人ライブラリ。',
+    description: '投げ入れるように、気になる情報を整理する個人ライブラリ。',
     start_url: '/',
     display: 'standalone',
-    background_color: '#faf8ff',
-    theme_color: '#faf8ff',
+    background_color: '#fafaf8',
+    theme_color: '#fafaf8',
     lang: 'ja-JP',
     orientation: 'any',
     icons: [

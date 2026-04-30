@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { Bell, Globe, Settings, LogOut, User } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -63,13 +64,20 @@ export function TopNavBar() {
   };
 
   return (
-    <header className="fixed top-0 w-full z-30 flex justify-between items-center px-4 md:px-6 py-4 lg:pl-80 bg-white/70 backdrop-blur-xl border-b border-outline-variant/10">
+    <header className="fixed top-0 w-full z-30 flex justify-between items-center px-4 md:px-6 py-4 lg:pl-80 bg-surface/86 backdrop-blur-xl border-b border-outline-variant/60">
       <div className="flex items-center gap-4 lg:hidden">
-        <h1 className="text-2xl font-logo font-normal tracking-normal text-on-surface mt-1">Throw In</h1>
+        <Image
+          src="/icons/app-icon-192.png"
+          alt=""
+          width={32}
+          height={32}
+          className="h-8 w-8 rounded-lg border border-outline-variant/50 bg-surface-container-lowest object-cover"
+        />
+        <h1 className="text-2xl font-logo font-light tracking-normal text-on-surface">Throw In</h1>
       </div>
       <div className="hidden lg:flex items-center gap-4">
-        <h2 className="text-xl font-bold tracking-tight text-on-surface">
-          {title ?? <span className="font-logo font-normal tracking-normal text-2xl pt-1">Throw In</span>}
+        <h2 className="text-xl font-medium tracking-normal text-on-surface">
+          {title ?? <span className="font-logo font-light tracking-normal text-2xl">Throw In</span>}
         </h2>
       </div>
 

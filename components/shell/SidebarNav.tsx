@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Library, Bookmark, History, Settings, FileText, Video, Image as ImageIcon, File, PenLine, Hash, Folder, Plus, ChevronDown, ChevronRight, LayoutGrid, Users, ScrollText, BarChart2, Bell } from 'lucide-react';
 import clsx from 'clsx';
@@ -126,12 +127,16 @@ function SidebarContent() {
       {/* Fixed header */}
       <div className="flex-shrink-0 px-6 py-5 border-b border-outline-variant/10 bg-surface-container-lowest/80 backdrop-blur-xl">
         <Link href="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-on-primary shadow-sm">
-            <Library className="w-5 h-5" />
-          </div>
+          <Image
+            src="/icons/app-icon-192.png"
+            alt=""
+            width={40}
+            height={40}
+            className="h-10 w-10 rounded-xl border border-outline-variant/50 bg-surface-container-lowest object-cover"
+          />
           <div>
-            <h1 className="text-2xl font-logo font-normal text-on-surface leading-tight pt-1">Throw In</h1>
-            <p className="text-[10px] uppercase tracking-widest text-outline font-bold">Digital Curator</p>
+            <h1 className="text-2xl font-logo font-light text-on-surface leading-tight">Throw In</h1>
+            <p className="text-[10px] text-outline">Your clips. Organized by AI.</p>
           </div>
         </Link>
       </div>
