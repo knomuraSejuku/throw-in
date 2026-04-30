@@ -14,6 +14,8 @@ const CATEGORY_TAXONOMY: Record<string, string[]> = {
   'Other':       ['その他'],
 };
 
+const MAX_AI_TAGS = 20;
+
 async function getOpenAIError(response: Response) {
   const text = await response.text().catch(() => '');
   return {
@@ -21,6 +23,27 @@ async function getOpenAIError(response: Response) {
     statusText: response.statusText,
     body: text.slice(0, 1000),
   };
+}
+
+function normalizeTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return [];
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const tag of tags) {
+    const value = String(tag ?? '').trim().replace(/^#/, '').replace(/\s+/g, ' ');
+    if (!value || value.length > 50) continue;
+
+    const key = value.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    normalized.push(value);
+    if (normalized.length >= MAX_AI_TAGS) break;
+  }
+
+  return normalized;
 }
 
 export async function POST(req: NextRequest) {
@@ -59,7 +82,9 @@ ${JSON.stringify(CATEGORY_TAXONOMY)}
 ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
 
 タグ付けルール:
-- 数に上限なし。コンテンツを正確に表す粒度でできるだけ細かくタグを付ける
+- tagsは最大20件。必ず原典本文・タイトル・要約への関連度が高い順に並べる
+- 上位20件に入らない周辺語・一般語・重複語・広すぎるタグは出力しない
+- 原典の主要概念、固有名詞、技術名、人物名、プロダクト名、テーマに強く関係するタグだけを選ぶ
 - 既存タグに合致するものがあれば完全一致で再利用する
 - 新しい概念には新規タグを追加してよい
 - タグは短く具体的に（1〜4語程度）
@@ -96,10 +121,10 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
       try {
         const parsed = JSON.parse(outputText);
         aiSummary = parsed.summary || null;
-        if (Array.isArray(parsed.tags)) newTags = parsed.tags;
+        newTags = normalizeTags(parsed.tags);
         aiCategory = parsed.category || null;
         aiSubcategory = parsed.subcategory || null;
-        aiKeyPoints = parsed.key_points || null;
+        aiKeyPoints = typeof parsed.key_points === 'string' ? parsed.key_points.trim() : null;
       } catch { /* parse error, retry */ }
       if (aiSummary || newTags.length > 0 || aiCategory || aiKeyPoints) {
         break;
@@ -137,7 +162,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
     console.error('Embedding generation threw', err);
   }
 
-  const mergedTags = Array.from(new Set([...existingTags, ...newTags]));
+  const mergedTags = normalizeTags(newTags.length > 0 ? newTags : existingTags);
 
   // Persist to DB
   const dbUpdate: Record<string, unknown> = { summary: aiSummary };

@@ -14,6 +14,24 @@ import { createClient } from '@/lib/supabase/client';
 import { CelebrationEffect } from '@/components/effects/CelebrationEffect';
 import { aiJustCompleted } from '@/lib/store';
 
+function formatPlainArticleText(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+
+  if (/\n/.test(trimmed)) {
+    return trimmed
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  return trimmed
+    .replace(/([。！？!?])\s*/g, '$1\n\n')
+    .replace(/\. (?=[A-Z])/g, '.\n\n')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
 export default function ClipDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const unwrappedParams = use(params);
@@ -177,11 +195,11 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
       {/* Sticky sub-header */}
       <div
         className={clsx(
-          'fixed top-[56px] lg:top-[64px] left-0 right-0 lg:left-72 z-20 transition-all duration-200',
+          'fixed top-[64px] lg:top-[64px] left-0 right-0 lg:left-72 z-20 transition-all duration-200',
           showStickyHeader ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
         )}
       >
-        <div className="bg-background/90 backdrop-blur-xl border-b border-outline-variant/15 px-4 md:px-8 py-3 max-w-4xl mx-auto lg:max-w-none lg:mx-0 lg:px-8">
+        <div className="bg-background/90 backdrop-blur-xl border-b border-outline-variant/15 px-4 md:px-8 pt-4 pb-3 md:py-3 max-w-4xl mx-auto lg:max-w-none lg:mx-0 lg:px-8">
           {/* Row 1: back + type + date + category + subcategory + buttons */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-wrap min-w-0">
@@ -494,20 +512,20 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
           
           {/* Summary / AI Note */}
           {clip.summary && (
-            <div className="mb-6 p-6 bg-primary/5 border border-primary/20 rounded-2xl relative">
+            <div className="mb-8 p-6 md:p-7 bg-primary/5 border border-primary/20 rounded-2xl relative">
                <div className="absolute -top-3 left-6 bg-surface px-2 text-[10px] font-bold text-primary tracking-widest uppercase">AI Summary</div>
-               <p className="text-on-surface leading-relaxed text-sm md:text-base">
-                 {clip.summary}
+               <p className="text-on-surface leading-[1.9] text-base md:text-lg">
+                 {clip.summary.trim()}
                </p>
             </div>
           )}
 
           {/* Key Points */}
           {clip.keyPoints && (
-            <div className="mb-12 p-6 bg-surface-container-low border border-outline-variant/30 rounded-2xl relative">
+            <div className="mb-12 p-5 md:p-6 bg-surface-container-low border border-outline-variant/30 rounded-2xl relative">
               <div className="absolute -top-3 left-6 bg-surface px-2 text-[10px] font-bold text-secondary tracking-widest uppercase">Key Points</div>
-              <div className="prose-body text-sm">
-                <ReactMarkdown>{clip.keyPoints}</ReactMarkdown>
+              <div className="prose-body prose-compact text-base md:text-[1.0625rem] pt-1">
+                <ReactMarkdown>{clip.keyPoints.trim()}</ReactMarkdown>
               </div>
             </div>
           )}
@@ -582,13 +600,13 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
               <div className="relative">
                 <div
                   className={clsx(
-                    'prose-body overflow-hidden transition-all duration-300',
+                    'prose-body prose-readable prose-compact overflow-hidden transition-all duration-300',
                     !isBodyExpanded && 'max-h-[9rem]'
                   )}
                 >
                   {/<[a-z][\s\S]*>/i.test(clip.body)
                     ? <ReactMarkdown rehypePlugins={[rehypeRaw, rehypeSanitize]}>{clip.body}</ReactMarkdown>
-                    : <div className="whitespace-pre-wrap text-sm text-on-surface-variant leading-relaxed">{clip.body}</div>
+                    : <div className="whitespace-pre-wrap text-base md:text-[1.0625rem] text-on-surface leading-[2]">{formatPlainArticleText(clip.body)}</div>
                   }
                 </div>
                 {!isBodyExpanded && (

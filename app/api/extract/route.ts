@@ -66,6 +66,15 @@ function normalizeText(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+function normalizeArticleText(text: string): string {
+  return text
+    .split('\n')
+    .map(line => normalizeText(line))
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+}
+
 function decodeHtmlEntities(text: string): string {
   return text
     .replace(/&nbsp;/gi, ' ')
@@ -107,7 +116,12 @@ function htmlToText(html: string): string {
     .replace(/<nav\b[^>]*>[\s\S]*?<\/nav>/gi, ' ')
     .replace(/<footer\b[^>]*>[\s\S]*?<\/footer>/gi, ' ');
 
-  return normalizeText(decodeHtmlEntities(withoutNoise.replace(/<[^>]+>/g, ' ')));
+  const withBlockBreaks = withoutNoise
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|section|article|main|header|h[1-6]|li|blockquote|pre)>/gi, '\n\n')
+    .replace(/<li\b[^>]*>/gi, '\n- ');
+
+  return normalizeArticleText(decodeHtmlEntities(withBlockBreaks.replace(/<[^>]+>/g, ' ')));
 }
 
 function extractMainText(html: string): string {

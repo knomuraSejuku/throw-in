@@ -133,6 +133,20 @@
     font-size: 1rem;
   }
 
+  .prose-body.prose-compact > :first-child {
+    margin-top: 0;
+  }
+
+  .prose-body.prose-compact > :last-child {
+    margin-bottom: 0;
+  }
+
+  .prose-body.prose-readable {
+    font-size: 1.05rem;
+    line-height: 2;
+    color: var(--color-on-surface);
+  }
+
   /* Headings */
   .prose-body h1,
   .prose-body h2,
@@ -158,6 +172,10 @@
   /* Paragraph */
   .prose-body p {
     margin-bottom: 1.25rem;
+  }
+
+  .prose-body.prose-readable p {
+    margin-bottom: 1.5rem;
   }
 
   /* Links */
@@ -281,4 +299,3 @@
     box-shadow: var(--shadow-ambient);
   }
 }
-
