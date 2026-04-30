@@ -179,9 +179,7 @@ export default function SearchPage() {
             みんなのクリップを検索
           </div>
 
-          <h1 className="text-4xl md:text-[3.5rem] font-bold tracking-tight text-on-surface leading-tight text-center">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-tertiary">グローバルクリップ</span>
-          </h1>
+          <h1 className="brand-page-title text-center">グローバルクリップ</h1>
 
           <div className="w-full max-w-3xl relative group">
             <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">

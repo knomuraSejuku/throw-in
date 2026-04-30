@@ -55,7 +55,7 @@ export default function HistoryPage() {
       <div className="w-full max-w-5xl mx-auto px-4 md:px-6 py-8">
         <div className="mb-8 flex items-center gap-3">
           <History className="w-6 h-6 text-primary" />
-          <h1 className="text-2xl font-bold text-on-surface">閲覧履歴</h1>
+          <h1 className="brand-page-title">閲覧履歴</h1>
         </div>
 
         {isLoading ? (

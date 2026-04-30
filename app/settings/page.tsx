@@ -415,8 +415,8 @@ export default function SettingsPage() {
     <AppShell>
       <div className="w-full max-w-3xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-12">
         <div>
-          <h1 className="text-3xl font-bold text-on-surface mb-2">設定</h1>
-          <p className="text-on-surface-variant font-medium text-sm">アカウントとアプリケーションの管理</p>
+          <h1 className="brand-page-title">設定</h1>
+          <p className="brand-page-kicker mt-2">アカウントとアプリケーションの管理</p>
         </div>
 
         <div className="space-y-6">

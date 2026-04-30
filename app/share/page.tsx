@@ -16,7 +16,7 @@ export default function SharePage() {
             <Share2 className="w-8 h-8" />
           </div>
           
-          <h2 className="text-2xl font-bold text-on-surface">共有から保存</h2>
+          <h1 className="brand-page-title">共有から保存</h1>
           <p className="text-on-surface-variant text-sm">
             アプリやブラウザから連携された情報をクリップとして保存します。
           </p>

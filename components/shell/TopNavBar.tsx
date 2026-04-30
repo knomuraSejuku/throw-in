@@ -9,7 +9,7 @@ import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/supabase/client';
 
 const PAGE_TITLES: Record<string, string> = {
-  '/': 'ライブラリ',
+  '/': 'すべてのクリップ',
   '/search': 'グローバルクリップ',
   '/following': 'フォロー中',
   '/history': '閲覧履歴',
@@ -21,10 +21,19 @@ const PAGE_TITLES: Record<string, string> = {
   '/collections': 'コレクション',
 };
 
+function resolvePageTitle(pathname: string) {
+  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
+  if (pathname.startsWith('/clip/')) return 'クリップ詳細';
+  if (pathname.startsWith('/view/')) return 'グローバルクリップ';
+  if (pathname.startsWith('/user/')) return 'プロフィール';
+  if (pathname.startsWith('/admin/')) return '管理';
+  return '';
+}
+
 export function TopNavBar() {
   const pathname = usePathname();
   const router = useRouter();
-  const title = PAGE_TITLES[pathname] ?? '';
+  const title = resolvePageTitle(pathname);
   const { user } = useAuthStore();
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState<{ displayName: string | null; avatarEmoji: string }>({ displayName: null, avatarEmoji: '🙂' });
