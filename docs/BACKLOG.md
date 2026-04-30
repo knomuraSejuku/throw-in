@@ -818,6 +818,96 @@
     - DBの関連行が残ってUI/APIエラーにならない
   - ファイル: `app/clip/[id]/page.tsx`, `app/api/clips/[id]/route.ts`, `lib/store.ts`, `supabase/*.sql`
 
+### レスポンシブ・ナビゲーション・コメント修正
+- [ ] **K11** 全画面サイズ対応の徹底調査とUI崩れ修正
+  - **ユーザー要望:** スマホ、タブレット、PC、あらゆる画面サイズに綺麗に対応しきれているか徹底調査し、崩れ・はみ出し・美的調整をタスク化して修正実装する
+  - **調査対象画面:**
+    - `/` ライブラリ
+    - `/add`
+    - `/clip/[id]`
+    - `/view/[id]`
+    - `/search`
+    - `/following`
+    - `/notifications`
+    - `/insights`
+    - `/settings`
+    - `/user/[id]`
+    - `/collections`, `/history`, `/bookmarks`
+  - **対象viewport例:**
+    - 320px, 360px, 390px, 430px（スマホ）
+    - 768px, 820px, 1024px（タブレット）
+    - 1280px, 1440px, 1728px以上（PC）
+  - **確認観点:**
+    1. 横スクロール・はみ出し・重なり・切れ
+    2. fixed/stickyヘッダー・サイドバー・ボトムナビの重なり
+    3. ボタン/タグ/タイトル/カード内テキストの折り返し
+    4. モーダル・ドロップダウン・メニューの表示位置
+    5. 画像/iframe/本文/Markdownの幅・余白・行間
+    6. 美的な密度、余白、情報階層、タップしやすさ
+  - **実装方針:**
+    1. Playwrightまたはブラウザ実機確認で主要画面のスクリーンショットを取る
+    2. 発見した崩れをBACKLOG内に子項目として追記する
+    3. 影響範囲が小さいものから修正し、必要に応じて共通Shell/Navigation/Layoutへ集約する
+    4. 修正後に同じviewportで再確認する
+  - **受け入れ条件:**
+    - 主要画面で横スクロール・視認不能な重なり・タップ不能なUIがない
+    - スマホ/タブレット/PCでナビゲーションが意図した位置に表示される
+    - クリップ詳細・検索・追加フォームなど主要導線が各viewportで自然に操作できる
+    - 発見した個別問題がBACKLOGに記録され、修正済み/未対応が分かる
+  - ファイル: `components/shell/*`, `app/**/*.tsx`, `app/globals.css`, `docs/BACKLOG.md`
+
+- [ ] **K12** 通知・インサイト・更新情報・設定ボタンがメインカラム上部/下部に出る問題の修正
+  - **ユーザー報告:** `通知` / `インサイト` / `更新情報` / `設定` のボタンが、意図したサイドバーではなくメインカラム上部またはメインカラム下部に出てきてしまうことがある
+  - **関連:** K4で旧 `/reports` のゴーストメニューは一度対応したが、同種の現象が他画面または別viewportで残っている可能性がある
+  - **疑い箇所:**
+    - `components/shell/SidebarNav.tsx`
+      - サイドバー下部のfooterリンク領域
+      - `fixed left-0 top-0 h-full hidden lg:flex` のbreakpoint/表示条件
+      - `Suspense fallback` のaside表示
+    - `components/shell/AppShell.tsx`
+      - `main` の `lg:pl-72 pt-20 pb-24`
+      - Shell内のfixed要素のz-index
+    - `components/shell/BottomNavBar.tsx`
+      - モバイル下部ナビとの役割分離
+  - **調査方針:**
+    1. `/notifications`, `/insights`, `/changelog`, `/settings`, `/reports` でPC/タブレット/スマホ表示を確認
+    2. 問題要素がSidebarNav本体かSuspense fallbackか、またはCSS class欠落かを特定
+    3. サイドバーfooterリンクはPCサイドバー内だけに表示し、メインカラムへ流れない構造へ修正
+    4. モバイルで必要な導線はBottomNavBarまたはTopNavBarメニューへ明示的に置く
+  - **受け入れ条件:**
+    - `通知` / `インサイト` / `更新情報` / `設定` がメインカラム本文の上部/下部に浮き出ない
+    - PCではサイドバー内の意図した位置にのみ表示される
+    - モバイル/タブレットでは意図したナビゲーションにのみ表示される
+    - hover時に透明な横長ボタンや空白ボタンが出ない
+  - ファイル: `components/shell/SidebarNav.tsx`, `components/shell/AppShell.tsx`, `components/shell/BottomNavBar.tsx`, `components/shell/TopNavBar.tsx`
+
+- [ ] **K13** グローバルクリップにコメントが反映されない問題の修正
+  - **ユーザー報告:** グローバルクリップにコメントが反映されない
+  - **現状/疑い箇所:**
+    - F4でグローバルコメント機能は完了扱いだが、実利用で反映されていない
+    - `app/api/comments/route.ts` は `clips.is_global_search=true` を公開コメント条件としている
+    - コメントUI側が `/clip/[id]` と `/view/[id]` のどちらに実装されているか、または片方にしかない可能性がある
+    - RLS上、`clip_comments` のSELECT/INSERT policyが `auth.users` / `public.users` / `clips` の関係と噛み合っていない可能性がある
+    - コメント投稿後の再取得・ローカルstate更新・キャッシュ反映が漏れている可能性がある
+  - **調査方針:**
+    1. グローバル検索から公開クリップ詳細を開き、コメント一覧取得APIのレスポンスを確認
+    2. コメント投稿APIのレスポンスとSupabase `clip_comments` insert結果を確認
+    3. `app/view/[id]/page.tsx` と `app/clip/[id]/page.tsx` のコメントUI実装有無を確認
+    4. RLS policy `read comments on public clips` / `insert own comment` / `delete own comment` を実DBスキーマに合わせて再確認
+    5. 投稿後にコメント一覧を再fetchし、UIへ即時反映する
+  - **実装方針:**
+    - コメントUIが未実装/片側のみなら、公開クリップ詳細にコメント一覧・投稿フォームを追加する
+    - API側で `is_global_search` 条件・認証・通知生成を再検証する
+    - 投稿成功時はローカルstateへ追加または一覧再fetchする
+    - エラー時は画面に分かりやすく表示する
+  - **受け入れ条件:**
+    - グローバル公開クリップでコメント一覧が表示される
+    - ログインユーザーがコメント投稿でき、投稿直後に画面へ反映される
+    - リプライ/いいね/削除が既存仕様通り動く
+    - 非公開クリップにはグローバルコメントが表示/投稿されない
+    - コメント投稿時の通知が必要な相手へ作成される
+  - ファイル: `app/api/comments/route.ts`, `app/view/[id]/page.tsx`, `app/clip/[id]/page.tsx`, `supabase/13_comments.sql`
+
 ### クリップ保存
 - [x] **C4** 「自分のクリップとして保存」ボタン（`/view/[id]` に追加）
   - 公開クリップを自ライブラリに複製保存する機能
