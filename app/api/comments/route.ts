@@ -26,6 +26,20 @@ const anonClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
+type CommentRow = {
+  id: string;
+  content: string;
+  parent_id: string | null;
+  created_at: string;
+  user_id: string;
+};
+
+type UserProfile = {
+  id: string;
+  display_name: string | null;
+  avatar_emoji: string | null;
+};
+
 // GET /api/comments?clipId=xxx — list comments with like counts + current user's likes
 export async function GET(req: NextRequest) {
   const clipId = req.nextUrl.searchParams.get('clipId');
@@ -38,17 +52,29 @@ export async function GET(req: NextRequest) {
   // Fetch comments
   const { data: comments, error } = await anonClient
     .from('clip_comments')
-    .select(`
-      id, content, parent_id, created_at, user_id,
-      users:user_id ( display_name, avatar_emoji )
-    `)
+    .select('id, content, parent_id, created_at, user_id')
     .eq('clip_id', clipId)
     .order('created_at', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  const rows = (comments ?? []) as CommentRow[];
+  const userIds = [...new Set(rows.map(c => c.user_id))];
+  const profilesByUserId: Record<string, UserProfile> = {};
+
+  if (userIds.length > 0) {
+    const { data: profiles } = await anonClient
+      .from('users')
+      .select('id, display_name, avatar_emoji')
+      .in('id', userIds);
+
+    ((profiles ?? []) as UserProfile[]).forEach(profile => {
+      profilesByUserId[profile.id] = profile;
+    });
+  }
+
   // Fetch like counts
-  const commentIds = (comments ?? []).map(c => c.id);
+  const commentIds = rows.map(c => c.id);
   let likesByComment: Record<string, number> = {};
   let likedByMe: Set<string> = new Set();
 
@@ -74,8 +100,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const enriched = (comments ?? []).map(c => ({
+  const enriched = rows.map(c => ({
     ...c,
+    profiles: profilesByUserId[c.user_id] ? {
+      display_name: profilesByUserId[c.user_id].display_name,
+      avatar_emoji: profilesByUserId[c.user_id].avatar_emoji,
+    } : null,
     likeCount: likesByComment[c.id] ?? 0,
     likedByMe: likedByMe.has(c.id),
   }));
@@ -107,6 +137,12 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    const { data: profile } = await anonClient
+      .from('users')
+      .select('display_name, avatar_emoji')
+      .eq('id', user.id)
+      .maybeSingle();
+
     // Notify clip owner or parent commenter (skip if self)
     const notifyUserId = parentId
       ? (await anonClient.from('clip_comments').select('user_id').eq('id', parentId).single()).data?.user_id
@@ -120,7 +156,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ comment });
+    return NextResponse.json({
+      comment: {
+        ...comment,
+        profiles: profile ? {
+          display_name: profile.display_name,
+          avatar_emoji: profile.avatar_emoji,
+        } : null,
+        likeCount: 0,
+        likedByMe: false,
+      },
+    });
   }
 
   // --- Toggle like ---

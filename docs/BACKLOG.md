@@ -890,7 +890,7 @@
     - `npm run build` 通過
   - ファイル: `components/shell/SidebarNav.tsx`, `components/shell/AppShell.tsx`, `components/shell/BottomNavBar.tsx`, `components/shell/TopNavBar.tsx`
 
-- [ ] **K13** グローバルクリップにコメントが反映されない問題の修正
+- [x] **K13** グローバルクリップにコメントが反映されない問題の修正
   - **ユーザー報告:** グローバルクリップにコメントが反映されない
   - **現状/疑い箇所:**
     - F4でグローバルコメント機能は完了扱いだが、実利用で反映されていない
@@ -915,6 +915,20 @@
     - リプライ/いいね/削除が既存仕様通り動く
     - 非公開クリップにはグローバルコメントが表示/投稿されない
     - コメント投稿時の通知が必要な相手へ作成される
+  - **原因:**
+    - `clip_comments.user_id` は `auth.users` 参照だが、コメント取得APIで `users:user_id` の埋め込みjoinを使っていた
+    - 実DBでは `clip_comments` から `public.users` への直接FKリレーションがないため、PostgRESTのリレーション解決に失敗し、コメント一覧取得が500になる可能性があった
+    - APIレスポンスは `users` として返そうとしていた一方、画面側は `profiles` を参照しており、表示データのキーも不一致だった
+    - 投稿成功後は再fetch依存で、失敗時も画面にエラーが出ず、ユーザーからは「反映されない」状態に見えやすかった
+  - **実施済み:**
+    1. `app/api/comments/route.ts` のコメント取得で埋め込みjoinを廃止し、`clip_comments` を取得後、投稿者ID一覧から `public.users` を別クエリで取得する方式へ変更
+    2. コメントAPIの返却形式を画面側が参照している `profiles: { display_name, avatar_emoji }` に統一
+    3. コメント投稿APIでも投稿者プロフィール、`likeCount: 0`、`likedByMe: false` を含むコメントオブジェクトを返すように変更
+    4. `app/view/[id]/page.tsx` で投稿成功時に返却コメントを即時 `comments` stateへ追加し、その後再fetchでサーバー状態に同期するように変更
+    5. コメント取得/投稿失敗時に画面上へエラーメッセージを表示し、黙って失敗しないように変更
+  - **確認結果:**
+    - `npm run lint` 通過
+    - `npm run build` 通過
   - ファイル: `app/api/comments/route.ts`, `app/view/[id]/page.tsx`, `app/clip/[id]/page.tsx`, `supabase/13_comments.sql`
 
 ### クリップ保存

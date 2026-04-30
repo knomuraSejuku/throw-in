@@ -55,6 +55,7 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
   const [saving, setSaving] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState('');
+  const [commentError, setCommentError] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [editingMeta, setEditingMeta] = useState(false);
@@ -80,8 +81,13 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
   const fetchComments = useCallback(() => {
     fetch(`/api/comments?clipId=${id}`)
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => setComments(data.comments ?? []))
-      .catch(() => {});
+      .then(data => {
+        setComments(data.comments ?? []);
+        setCommentError(null);
+      })
+      .catch(() => {
+        setCommentError('コメントの取得に失敗しました。');
+      });
   }, [id]);
 
   useEffect(() => { fetchComments(); }, [fetchComments]);
@@ -133,9 +139,17 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
     });
     setPosting(false);
     if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.comment) {
+        setComments(prev => [...prev.filter(c => c.id !== data.comment.id), data.comment]);
+      }
       setCommentText('');
       setReplyTo(null);
+      setCommentError(null);
       fetchComments();
+    } else {
+      const data = await res.json().catch(() => null);
+      setCommentError(data?.error ?? 'コメントの投稿に失敗しました。');
     }
   }
 
@@ -429,6 +443,12 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
             <MessageCircle className="w-5 h-5 text-primary" />
             コメント {comments.length > 0 && <span className="text-on-surface-variant font-normal">({comments.length})</span>}
           </h2>
+
+          {commentError && (
+            <p className="rounded-xl border border-error/20 bg-error/5 px-3 py-2 text-sm text-error">
+              {commentError}
+            </p>
+          )}
 
           {topLevel.map(c => (
             <div key={c.id} className="space-y-2">
