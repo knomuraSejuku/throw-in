@@ -53,27 +53,27 @@ function makeParticles(
 }
 
 const COLORS: Record<CelebrationEffectType, string[]> = {
-  save: ['#004ac6', '#6a1edb', '#8343f4', '#2563eb', '#60a5fa', '#1a7f37', '#d0e1fb'],
-  read: ['#1a7f37', '#16a34a', '#4ade80', '#86efac', '#bbf7d0', '#34d399'],
-  ai:   ['#6a1edb', '#8343f4', '#a78bfa', '#c4b5fd', '#004ac6', '#60a5fa', '#e879f9'],
+  save: ['#111111', '#4d4d49', '#7a7972', '#d3d1c8', '#fafaf8'],
+  read: ['#111111', '#4d4d49', '#7a7972', '#d3d1c8', '#fafaf8'],
+  ai:   ['#111111', '#4d4d49', '#766f62', '#d3d1c8', '#fafaf8'],
 };
 
 const BADGE_TEXT: Record<CelebrationEffectType, string> = {
-  save: 'Throw In! ✓',
-  read: '既読 ✓',
-  ai:   'AI処理完了 ✦',
+  save: '保存しました',
+  read: '既読にしました',
+  ai:   '整理しました',
 };
 
 const BADGE_STYLE: Record<CelebrationEffectType, React.CSSProperties> = {
-  save: { background: 'linear-gradient(135deg, #004ac6, #6a1edb)', color: '#fff' },
-  read: { background: 'linear-gradient(135deg, #1a7f37, #16a34a)', color: '#fff' },
-  ai:   { background: 'linear-gradient(135deg, #6a1edb, #e879f9)', color: '#fff' },
+  save: { background: '#111111', color: '#fafaf8', border: '1px solid #111111' },
+  read: { background: '#ffffff', color: '#111111', border: '1px solid #d3d1c8' },
+  ai:   { background: '#efeee8', color: '#111111', border: '1px solid #d3d1c8' },
 };
 
 const CONFIG: Record<CelebrationEffectType, { count: number; spread: number; duration: number }> = {
-  save: { count: 70, spread: 420, duration: 2000 },
-  read: { count: 70, spread: 420, duration: 2000 },
-  ai:   { count: 70, spread: 420, duration: 2000 },
+  save: { count: 34, spread: 260, duration: 1500 },
+  read: { count: 26, spread: 220, duration: 1300 },
+  ai:   { count: 30, spread: 240, duration: 1500 },
 };
 
 interface CelebrationEffectProps {
@@ -124,7 +124,7 @@ export function CelebrationEffect({ type, origin, onDone }: CelebrationEffectPro
         />
       ))}
       <div
-        className="absolute text-xs font-black px-4 py-2 rounded-full shadow-lg whitespace-nowrap"
+        className="absolute text-xs font-semibold px-4 py-2 rounded-full shadow-ambient whitespace-nowrap"
         style={{
           left: pos.x,
           top: pos.y - 18,

@@ -63,6 +63,46 @@ async function getOpenAIError(response: Response) {
   };
 }
 
+async function checkAiQuota(userId: string, clipId: string) {
+  const service = getMetadataClient();
+  if (!service) return { ok: true, remaining: null };
+
+  try {
+    const { data: subscription } = await service
+      .from('user_subscriptions')
+      .select('billing_plans(weekly_ai_limit, name)')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const plan = Array.isArray(subscription?.billing_plans) ? subscription?.billing_plans[0] : subscription?.billing_plans;
+    const limit = Number(plan?.weekly_ai_limit ?? 20);
+    if (limit <= 0) return { ok: false, remaining: 0, limit, used: 0 };
+
+    const weekStart = new Date();
+    const day = weekStart.getDay();
+    const diff = (day === 0 ? -6 : 1) - day;
+    weekStart.setDate(weekStart.getDate() + diff);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const { count, error } = await service
+      .from('ai_usage_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .gte('created_at', weekStart.toISOString());
+
+    if (error) return { ok: true, remaining: null };
+    const used = count ?? 0;
+    return {
+      ok: used < limit,
+      remaining: Math.max(0, limit - used),
+      limit,
+      used,
+    };
+  } catch (error) {
+    console.warn('[ai_quota:skipped]', { clipId, error: error instanceof Error ? error.message : String(error) });
+    return { ok: true, remaining: null };
+  }
+}
+
 function getMetadataClient() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) return null;
@@ -145,6 +185,15 @@ export async function POST(req: NextRequest) {
   if (!clip) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const currentTitle = String(clip.title || clipTitle || '').trim();
   const shouldImproveTitle = isUploadedFileClip(clip) || isGenericTitle(currentTitle);
+
+  const quota = await checkAiQuota(user.id, clipId);
+  if (!quota.ok) {
+    return NextResponse.json({
+      error: 'AI weekly limit reached',
+      detail: `週間AI処理回数の上限に達しました。プランを変更するか、次週までお待ちください。`,
+      quota,
+    }, { status: 429 });
+  }
 
   const systemPrompt = `あなたはプロの編集者です。ユーザーが保存するコンテンツのメタデータを抽出します。提供されたテキストを読み、以下のJSONフォーマットで要約・タグ・カテゴリを返してください。
 

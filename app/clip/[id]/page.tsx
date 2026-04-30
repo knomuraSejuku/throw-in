@@ -220,7 +220,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
       {/* Sticky sub-header */}
       <div
         className={clsx(
-          'fixed top-[64px] lg:top-[64px] left-0 right-0 lg:left-72 z-20 transition-all duration-200',
+          'fixed top-14 left-0 right-0 lg:left-72 z-20 transition-all duration-200',
           showStickyHeader ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
         )}
       >

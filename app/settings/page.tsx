@@ -30,6 +30,23 @@ type XImportDetail = {
   reason?: 'duplicate' | 'missing_url' | 'unsupported_zip_entry';
 };
 
+type BillingPlan = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  monthly_price_yen: number;
+  yearly_price_yen: number;
+  weekly_ai_limit: number;
+};
+
+type Subscription = {
+  id: string;
+  billing_interval: 'monthly' | 'yearly';
+  status: string;
+  billing_plans: BillingPlan | BillingPlan[] | null;
+};
+
 const xImportReasonLabel: Record<string, string> = {
   duplicate: '重複',
   missing_url: 'URLなし',
@@ -70,6 +87,10 @@ export default function SettingsPage() {
   const [xImportResults, setXImportResults] = useState<{ ok: number; skipped: number; fail: number } | null>(null);
   const [xImportDetails, setXImportDetails] = useState<XImportDetail[]>([]);
   const [isXImporting, setIsXImporting] = useState(false);
+  const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
+  const [isChangingPlan, setIsChangingPlan] = useState(false);
 
   const EMOJI_OPTIONS = ['🙂','😎','🤖','🦊','🐧','🐸','🦁','🐼','🌸','⚡','🎯','🚀','🎨','📚','🎵','🌍'];
   const hasGoogleIdentity = user?.identities?.some(identity => identity.provider === 'google') ?? false;
@@ -114,6 +135,22 @@ export default function SettingsPage() {
       });
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    Promise.all([
+      fetch('/api/billing/plans').then(r => r.ok ? r.json() : { plans: [] }),
+      fetch('/api/billing/subscription').then(r => r.ok ? r.json() : { subscription: null }),
+    ]).then(([plansData, subscriptionData]) => {
+      setBillingPlans(plansData.plans ?? []);
+      setSubscription(subscriptionData.subscription ?? null);
+      const interval = subscriptionData.subscription?.billing_interval;
+      if (interval === 'monthly' || interval === 'yearly') setBillingInterval(interval);
+    }).catch(() => {
+      setBillingPlans([]);
+      setSubscription(null);
+    });
+  }, [user]);
+
   const handleSaveProfile = async () => {
     if (!user) return;
     setIsSavingProfile(true);
@@ -126,6 +163,24 @@ export default function SettingsPage() {
     setIsSavingNotif(true);
     await supabase.from('users').update({ notification_prefs: notifPrefs }).eq('id', user.id);
     setIsSavingNotif(false);
+  };
+
+  const handlePlanChange = async (planId: string) => {
+    setIsChangingPlan(true);
+    try {
+      const res = await fetch('/api/billing/subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId, billingInterval }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'プラン変更に失敗しました。');
+      setSubscription(data.subscription);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'プラン変更に失敗しました。');
+    } finally {
+      setIsChangingPlan(false);
+    }
   };
 
   const handleChangeEmail = async () => {
@@ -668,17 +723,86 @@ export default function SettingsPage() {
           </section>
 
           {/* Plan & Quota */}
-          <section className="bg-surface-container-lowest rounded-[32px] p-6 md:p-8 shadow-ambient space-y-4">
-            <div className="flex items-center gap-3 text-tertiary mb-2">
-              <CreditCard className="w-6 h-6" />
-              <h3 className="font-bold text-lg">プラン</h3>
+          <section className="bg-surface-container-lowest rounded-[32px] p-6 md:p-8 shadow-ambient space-y-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3 text-tertiary">
+                <CreditCard className="w-6 h-6" />
+                <div>
+                  <h3 className="font-bold text-lg text-on-surface">プラン</h3>
+                  <p className="text-xs text-on-surface-variant">週間AI処理回数は選択中のプランで決まります。</p>
+                </div>
+              </div>
+              <div className="inline-flex rounded-full bg-surface-container-low p-1 border border-outline-variant/30">
+                {(['monthly', 'yearly'] as const).map(interval => (
+                  <button
+                    key={interval}
+                    type="button"
+                    onClick={() => setBillingInterval(interval)}
+                    className={clsx(
+                      'rounded-full px-4 py-2 text-xs font-bold transition-colors',
+                      billingInterval === interval ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'
+                    )}
+                  >
+                    {interval === 'monthly' ? '月額' : '年額'}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex items-end gap-2">
-              <span className="text-3xl font-bold text-on-surface">PREVIEW</span>
+
+            <div className="grid gap-3">
+              {billingPlans.length === 0 ? (
+                <div className="rounded-2xl bg-surface-container-low p-4 text-sm text-on-surface-variant">
+                  プラン情報を読み込めませんでした。SQL適用後に表示されます。
+                </div>
+              ) : billingPlans.map(plan => {
+                const currentPlan = subscription?.billing_plans
+                  ? (Array.isArray(subscription.billing_plans) ? subscription.billing_plans[0] : subscription.billing_plans)
+                  : null;
+                const isCurrent = currentPlan?.id === plan.id && subscription?.billing_interval === billingInterval;
+                const price = billingInterval === 'yearly' ? plan.yearly_price_yen : plan.monthly_price_yen;
+                const monthlyEquivalent = billingInterval === 'yearly' ? Math.round(plan.yearly_price_yen / 12) : plan.monthly_price_yen;
+                return (
+                  <div key={plan.id} className={clsx(
+                    'rounded-3xl border p-4 transition-colors',
+                    isCurrent ? 'border-primary bg-primary/5' : 'border-outline-variant/20 bg-surface-container-low'
+                  )}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-bold text-on-surface">{plan.name}</p>
+                          {isCurrent && <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-on-primary">現在</span>}
+                        </div>
+                        <p className="text-xs text-on-surface-variant">{plan.description}</p>
+                        <p className="mt-1 text-xs font-semibold text-on-surface">
+                          週間AI処理 {plan.weekly_ai_limit.toLocaleString('ja-JP')}回
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 sm:justify-end">
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-on-surface">¥{price.toLocaleString('ja-JP')}</p>
+                          <p className="text-[10px] text-on-surface-variant">
+                            {billingInterval === 'yearly'
+                              ? `年額 / 月換算 ¥${monthlyEquivalent.toLocaleString('ja-JP')}（2ヶ月分無料）`
+                              : '月額'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handlePlanChange(plan.id)}
+                          disabled={isChangingPlan || isCurrent}
+                          className={clsx(
+                            'rounded-full px-4 py-2 text-xs font-bold transition-colors disabled:opacity-50',
+                            isCurrent ? 'bg-surface-container text-on-surface-variant' : 'bg-primary text-on-primary hover:opacity-90'
+                          )}
+                        >
+                          {isCurrent ? '選択中' : '選択'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <p className="text-sm text-on-surface-variant leading-relaxed">
-              現在はプレビュー利用です。正式リリース後のプランについては後日アナウンスされます。
-            </p>
           </section>
 
           {/* PWA & Install */}
