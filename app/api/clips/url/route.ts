@@ -51,17 +51,23 @@ function getLookupClient() {
   );
 }
 
-async function fetchJsonWithRetry(origin: string, pathname: string, url: string) {
+function buildJsonHeaders(cookieHeader: string | null): HeadersInit {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (cookieHeader) headers.cookie = cookieHeader;
+  return headers;
+}
+
+async function fetchJsonWithRetry(origin: string, pathname: string, url: string, cookieHeader: string | null) {
   const res = await fetch(`${origin}${pathname}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildJsonHeaders(cookieHeader),
     body: JSON.stringify({ url }),
   });
   if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
   return await res.json();
 }
 
-async function extractUrl(origin: string, normalizedUrl: string) {
+async function extractUrl(origin: string, normalizedUrl: string, cookieHeader: string | null) {
   let extractedData: {
     title?: string | null;
     body?: string | null;
@@ -72,13 +78,13 @@ async function extractUrl(origin: string, normalizedUrl: string) {
 
   if (isYouTubeUrl(normalizedUrl)) {
     try {
-      extractedData = await fetchJsonWithRetry(origin, '/api/youtube', normalizedUrl);
+      extractedData = await fetchJsonWithRetry(origin, '/api/youtube', normalizedUrl, cookieHeader);
     } catch {
       extractedData = null;
     }
 
     try {
-      const ogData = await fetchJsonWithRetry(origin, '/api/extract', normalizedUrl);
+      const ogData = await fetchJsonWithRetry(origin, '/api/extract', normalizedUrl, cookieHeader);
       extractedData = {
         ...extractedData,
         title: ogData.title || extractedData?.title,
@@ -90,7 +96,7 @@ async function extractUrl(origin: string, normalizedUrl: string) {
       // Keep transcript-only data when available.
     }
   } else {
-    extractedData = await fetchJsonWithRetry(origin, '/api/extract', normalizedUrl);
+    extractedData = await fetchJsonWithRetry(origin, '/api/extract', normalizedUrl, cookieHeader);
   }
 
   return extractedData;
@@ -115,6 +121,7 @@ export async function POST(req: NextRequest) {
   const note = String(body?.note ?? '');
   const tags = Array.isArray(body?.tags) ? body.tags.map((tag: unknown) => String(tag).trim()).filter(Boolean) : [];
   const lookup = getLookupClient();
+  const cookieHeader = req.headers.get('cookie');
 
   let clipId: string | null = null;
   let created = false;
@@ -137,7 +144,7 @@ export async function POST(req: NextRequest) {
 
     if (!bodyForAi.trim()) {
       try {
-        const extractedData = await extractUrl(req.nextUrl.origin, normalizedUrl);
+        const extractedData = await extractUrl(req.nextUrl.origin, normalizedUrl, cookieHeader);
         const extractedBody = extractedData?.body || extractedData?.description || '';
         if (extractedBody.trim()) {
           bodyForAi = extractedBody;
@@ -159,7 +166,7 @@ export async function POST(req: NextRequest) {
   } else {
     let extractedData: Awaited<ReturnType<typeof extractUrl>> = null;
     try {
-      extractedData = await extractUrl(req.nextUrl.origin, normalizedUrl);
+      extractedData = await extractUrl(req.nextUrl.origin, normalizedUrl, cookieHeader);
     } catch (error) {
       console.warn('[clips:url:extract_failed]', error);
     }

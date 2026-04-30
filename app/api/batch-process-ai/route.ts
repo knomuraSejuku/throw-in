@@ -49,7 +49,13 @@ function isYouTubeUrl(url: string) {
   return url.includes('youtube.com') || url.includes('youtu.be');
 }
 
-async function fetchExtraction(origin: string, url: string, contentType?: string | null) {
+function buildJsonHeaders(cookieHeader: string | null): HeadersInit {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (cookieHeader) headers.cookie = cookieHeader;
+  return headers;
+}
+
+async function fetchExtraction(origin: string, url: string, contentType: string | null | undefined, cookieHeader: string | null) {
   const endpoints = contentType === 'video' && isYouTubeUrl(url)
     ? ['/api/youtube', '/api/extract']
     : ['/api/extract'];
@@ -58,7 +64,7 @@ async function fetchExtraction(origin: string, url: string, contentType?: string
   for (const endpoint of endpoints) {
     const res = await fetch(`${origin}${endpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildJsonHeaders(cookieHeader),
       body: JSON.stringify({ url }),
     });
     if (res.ok) return await res.json();
@@ -78,6 +84,7 @@ export async function POST(req: NextRequest) {
   const deadlineMs = Math.max(5_000, Math.min(Number(body?.deadlineMs) || DEFAULT_DEADLINE_MS, DEFAULT_DEADLINE_MS));
   const startedAt = Date.now();
   const clipIds = requestedClipIds.slice(0, maxItems);
+  const cookieHeader = req.headers.get('cookie');
   if (clipIds.length === 0) return NextResponse.json({ error: 'clipIds required' }, { status: 400 });
 
   const { data: saves, error: clipsError } = await supabase
@@ -133,7 +140,7 @@ export async function POST(req: NextRequest) {
     let content = clip.extracted_content || '';
     if ((!content.trim() || content.trim().length <= 10) && clip.url) {
       try {
-        const extracted = await fetchExtraction(req.nextUrl.origin, clip.url, clip.content_type);
+        const extracted = await fetchExtraction(req.nextUrl.origin, clip.url, clip.content_type, cookieHeader);
         const extractedBody = extracted?.body || extracted?.description || '';
         if (String(extractedBody).trim().length > 10) {
           content = String(extractedBody);
