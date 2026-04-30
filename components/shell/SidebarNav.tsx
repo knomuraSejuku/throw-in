@@ -113,7 +113,7 @@ function SidebarContent() {
   }, [clips]);
 
   return (
-    <aside className="fixed left-0 top-0 h-full hidden lg:flex flex-col bg-surface-container-lowest w-72 z-40 border-r border-outline-variant/10">
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-hidden bg-surface-container-lowest border-r border-outline-variant/10">
 
       {/* Fixed header */}
       <div className="flex-shrink-0 px-6 py-5 border-b border-outline-variant/10 bg-surface-container-lowest/80 backdrop-blur-xl">
@@ -128,7 +128,7 @@ function SidebarContent() {
         </Link>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2">
+      <div className="min-h-0 flex-1 overflow-y-auto py-6 px-4 space-y-2">
         {/* Main Views */}
         <div className="space-y-1 pb-4">
           {mainNav.map((item) => (
@@ -389,7 +389,7 @@ function SidebarContent() {
         </div>
       </div>
 
-      <div className="flex-shrink-0 px-4 py-4 border-t border-outline-variant/10 space-y-1">
+      <div className="shrink-0 px-4 py-4 border-t border-outline-variant/10 bg-surface-container-lowest space-y-1">
         <Link
           href="/notifications"
           className={clsx(
@@ -437,8 +437,17 @@ function SidebarContent() {
 
 export function SidebarNav() {
   return (
-    <Suspense fallback={<aside className="fixed left-0 top-0 h-full hidden lg:flex flex-col w-72 bg-surface-container-lowest border-r border-outline-variant/10" />}>
-      <SidebarContent />
-    </Suspense>
+    <div className="hidden lg:block" aria-label="デスクトップサイドバー">
+      <Suspense
+        fallback={
+          <aside
+            aria-hidden="true"
+            className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-hidden bg-surface-container-lowest border-r border-outline-variant/10"
+          />
+        }
+      >
+        <SidebarContent />
+      </Suspense>
+    </div>
   );
 }

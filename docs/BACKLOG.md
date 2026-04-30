@@ -856,7 +856,7 @@
     - 発見した個別問題がBACKLOGに記録され、修正済み/未対応が分かる
   - ファイル: `components/shell/*`, `app/**/*.tsx`, `app/globals.css`, `docs/BACKLOG.md`
 
-- [ ] **K12** 通知・インサイト・更新情報・設定ボタンがメインカラム上部/下部に出る問題の修正
+- [x] **K12** 通知・インサイト・更新情報・設定ボタンがメインカラム上部/下部に出る問題の修正
   - **ユーザー報告:** `通知` / `インサイト` / `更新情報` / `設定` のボタンが、意図したサイドバーではなくメインカラム上部またはメインカラム下部に出てきてしまうことがある
   - **関連:** K4で旧 `/reports` のゴーストメニューは一度対応したが、同種の現象が他画面または別viewportで残っている可能性がある
   - **疑い箇所:**
@@ -879,6 +879,15 @@
     - PCではサイドバー内の意図した位置にのみ表示される
     - モバイル/タブレットでは意図したナビゲーションにのみ表示される
     - hover時に透明な横長ボタンや空白ボタンが出ない
+  - **実施済み:**
+    1. `SidebarNav` 全体を外側の `hidden lg:block` ラッパーでPC専用領域化し、`SidebarContent` 内部のfooterリンクがメインカラムへ流入しない構造に変更
+    2. サイドバー本体は `fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-hidden` に統一し、表示条件と固定配置の責務を分離
+    3. `Suspense fallback` も同じ固定サイドバー寸法に揃え、fallback表示中に本文側へ空要素やボタン領域が混入しないように調整
+    4. サイドバーのスクロール領域へ `min-h-0`、footer領域へ `shrink-0` と背景色を追加し、下部リンクがサイドバー内の固定footerとして収まるように調整
+    5. `AppShell` のrootへ `overflow-x-hidden`、`main` へ `relative z-0 min-w-0` を追加し、fixedナビゲーションと本文の横方向はみ出し/重なりを抑制
+  - **確認結果:**
+    - `npm run lint` 通過
+    - `npm run build` 通過
   - ファイル: `components/shell/SidebarNav.tsx`, `components/shell/AppShell.tsx`, `components/shell/BottomNavBar.tsx`, `components/shell/TopNavBar.tsx`
 
 - [ ] **K13** グローバルクリップにコメントが反映されない問題の修正
