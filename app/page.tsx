@@ -12,7 +12,7 @@ import confetti from 'canvas-confetti';
 
 function LibraryContent() {
   const router = useRouter();
-  const { clips, fetchClips, isLoading, processingJobs, semanticSearch, deleteClip } = useClipStore();
+  const { clips, fetchClips, isLoading, processingJobs, semanticSearch, deleteClip, startProcessingJob, updateProcessingJob } = useClipStore();
   const { collections } = useCollectionStore();
   const searchParams = useSearchParams();
   const currentFilter = searchParams.get('filter');
@@ -33,11 +33,13 @@ function LibraryContent() {
     if (!processClipId || isLoading || processingJobs[processClipId]) return;
 
     const processSharedClip = async () => {
+      startProcessingJob(processClipId, 'enriching');
       const res = await fetch('/api/batch-process-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clipIds: [processClipId] }),
       });
+      updateProcessingJob(processClipId, res.ok ? 'done' : 'failed');
       if (res.ok) await fetchClips();
     };
     processSharedClip();
@@ -45,7 +47,7 @@ function LibraryContent() {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('process');
     router.replace(`/?${params.toString()}`, { scroll: false });
-  }, [fetchClips, isLoading, processClipId, processingJobs, router, searchParams]);
+  }, [fetchClips, isLoading, processClipId, processingJobs, router, searchParams, startProcessingJob, updateProcessingJob]);
 
   // Local View States
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');

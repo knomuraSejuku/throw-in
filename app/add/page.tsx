@@ -292,13 +292,8 @@ function AddClipForm() {
         if (!res.ok) throw new Error(data?.error || 'URLクリップの保存に失敗しました');
 
         await useClipStore.getState().fetchClips();
-        if (data?.body && String(data.body).trim().length > 10) {
-          useClipStore.getState().processClipAI(data.clipId, data.body);
-        } else {
-          useClipStore.getState().updateProcessingJob(data.clipId, 'done');
-        }
         setIsSaved(true);
-        setTimeout(() => router.push('/'), 1500);
+        setTimeout(() => router.push(`/?process=${encodeURIComponent(data.clipId)}`), 1500);
         return;
       }
 
@@ -428,16 +423,11 @@ function AddClipForm() {
 
       await useClipStore.getState().fetchClips();
 
-      // ====== Async AI Processing ======
-      const contentForAi = extractedData?.body || note || "";
-      if (!inheritedClip && contentForAi && contentForAi.trim().length > 10) {
-         useClipStore.getState().processClipAI(clipId, contentForAi);
-      } else {
-         useClipStore.getState().updateProcessingJob(clipId, 'done');
-      }
-
       setIsSaved(true);
-      setTimeout(() => router.push('/'), 1500);
+      setTimeout(() => {
+        const shouldProcess = !inheritedClip && ((extractedData?.body || note || '').trim().length > 10);
+        router.push(shouldProcess ? `/?process=${encodeURIComponent(clipId)}` : '/');
+      }, 1500);
 
     } catch (err: any) {
       console.error(err);
