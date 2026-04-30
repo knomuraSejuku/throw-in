@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '@/components/shell/AppShell';
-import { Activity, CreditCard, Database, LayoutTemplate, Loader2, ShieldAlert, Users } from 'lucide-react';
+import { Activity, CreditCard, Database, Flag, LayoutTemplate, Loader2, ShieldAlert, Users } from 'lucide-react';
 import Link from 'next/link';
 
 type Plan = {
@@ -229,6 +229,21 @@ export default function AdminPage() {
             </section>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Link href="/admin/billing" className="brand-panel p-8 hover:shadow-card-hover transition-all block">
+                <CreditCard className="w-8 h-8 text-primary mb-4" />
+                <h3 className="text-lg font-bold text-on-surface mb-2">課金管理</h3>
+                <p className="text-sm text-on-surface-variant">契約、請求間隔、プラン状態を確認します。</p>
+              </Link>
+              <Link href="/admin/clips" className="brand-panel p-8 hover:shadow-card-hover transition-all block">
+                <Database className="w-8 h-8 text-primary mb-4" />
+                <h3 className="text-lg font-bold text-on-surface mb-2">クリップ管理</h3>
+                <p className="text-sm text-on-surface-variant">公開状態、AI整理状態、作成状況を確認します。</p>
+              </Link>
+              <Link href="/admin/reports" className="brand-panel p-8 hover:shadow-card-hover transition-all block">
+                <Flag className="w-8 h-8 text-primary mb-4" />
+                <h3 className="text-lg font-bold text-on-surface mb-2">通報管理</h3>
+                <p className="text-sm text-on-surface-variant">通報内容と対応ステータスを確認します。</p>
+              </Link>
               <Link href="/admin/jobs" className="brand-panel p-8 hover:shadow-card-hover transition-all block">
                 <Database className="w-8 h-8 text-primary mb-4" />
                 <h3 className="text-lg font-bold text-on-surface mb-2">ジョブ管理</h3>

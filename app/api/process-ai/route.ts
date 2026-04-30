@@ -68,13 +68,22 @@ async function checkAiQuota(userId: string, clipId: string) {
   if (!service) return { ok: true, remaining: null };
 
   try {
+    const { data: adminUser } = await service
+      .from('admin_users')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (adminUser) return { ok: true, remaining: null, admin: true };
+
     const { data: subscription } = await service
       .from('user_subscriptions')
       .select('billing_plans(weekly_ai_limit, name)')
       .eq('user_id', userId)
       .maybeSingle();
     const plan = Array.isArray(subscription?.billing_plans) ? subscription?.billing_plans[0] : subscription?.billing_plans;
-    const limit = Number(plan?.weekly_ai_limit ?? 20);
+    if (!plan) return { ok: true, remaining: null };
+
+    const limit = Number(plan.weekly_ai_limit ?? 0);
     if (limit <= 0) return { ok: false, remaining: 0, limit, used: 0 };
 
     const weekStart = new Date();
