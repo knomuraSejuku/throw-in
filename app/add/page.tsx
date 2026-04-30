@@ -569,7 +569,7 @@ function AddClipForm() {
           </div>
 
           {/* Form Area */}
-          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-5 md:space-y-8 md:p-10 lg:p-12">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 pb-0 pt-5 md:space-y-8 md:p-10 lg:p-12">
             
             {isSaved && (
               <div className="bg-success/10 text-success px-4 py-3 rounded-xl text-sm font-bold border border-success/20 flex items-center gap-2">
@@ -811,7 +811,7 @@ function AddClipForm() {
               </div>
             )}
 
-            <div className="sticky bottom-0 -mx-5 flex items-center justify-end gap-3 border-t border-outline-variant/10 bg-surface-container-lowest/95 px-5 py-4 backdrop-blur md:static md:mx-0 md:border-t-0 md:bg-transparent md:px-0 md:pt-4 md:pb-0 md:backdrop-blur-0">
+            <div className="sticky bottom-0 -mx-5 flex items-center justify-end gap-3 border-t border-outline-variant/10 bg-surface-container-lowest px-5 py-4 md:static md:mx-0 md:border-t-0 md:bg-transparent md:px-0 md:pt-4 md:pb-0">
               <button
                 onClick={() => router.back()}
                 disabled={isSaving}
