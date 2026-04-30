@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import { CelebrationEffect } from '@/components/effects/CelebrationEffect';
 import clsx from 'clsx';
 import { useClipStore } from '@/lib/store';
+import { normalizeClipUrl } from '@/lib/url-normalize';
 import { createClient } from '@/lib/supabase/client';
 
 const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
@@ -55,21 +56,6 @@ const chunkArray = <T,>(items: T[], size: number): T[][] => {
 };
 
 const CSV_IMPORT_DRAFT_KEY = 'throwin:csv-import-draft';
-const GENERIC_CLIP_TITLES = new Set(['x post', 'x article', 'twitter post', '無題の記事']);
-
-function deriveReadableTitle(rawTitle: string | undefined | null, extractedBody: string | undefined | null, fallback: string) {
-  const candidate = (rawTitle ?? '').trim();
-  if (candidate && !GENERIC_CLIP_TITLES.has(candidate.toLowerCase())) return candidate;
-
-  const firstLine = (extractedBody ?? '')
-    .split('\n')
-    .map(line => line.trim())
-    .find(line => line && !line.startsWith('投稿内リンク:') && !/^https?:\/\//.test(line));
-
-  if (!firstLine) return fallback;
-  return firstLine.length > 80 ? `${firstLine.slice(0, 79).trim()}…` : firstLine;
-}
-
 type CsvBatchResult = {
   url: string;
   normalizedUrl?: string;
@@ -289,37 +275,42 @@ function AddClipForm() {
       let finalUrl = url.trim();
       if (mode === 'url' && finalUrl) {
         try {
-          const u = new URL(finalUrl);
-          const host = u.hostname.replace(/^(www\.|m\.)/, '');
-          if (host === 'youtube.com' || host === 'music.youtube.com') {
-            if (u.pathname === '/watch') {
-              const v = u.searchParams.get('v');
-              finalUrl = v ? `https://${u.hostname}/watch?v=${v}` : u.origin + u.pathname;
-            } else {
-              finalUrl = u.origin + u.pathname;
-            }
-          } else if (host === 'youtu.be') {
-            finalUrl = `https://youtu.be${u.pathname}`;
-          } else {
-            finalUrl = u.origin + u.pathname;
-          }
+          finalUrl = normalizeClipUrl(finalUrl);
           if (finalUrl !== url) setUrl(finalUrl);
         } catch { /* invalid URL — validation catches it later */ }
       }
       // ─────────────────────────────────────────────────────────────────
 
+      if (mode === 'url') {
+        if (!finalUrl) throw new Error("URLを入力してください");
+        const res = await fetch('/api/clips/url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: finalUrl, title, note, tags }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.error || 'URLクリップの保存に失敗しました');
+
+        await useClipStore.getState().fetchClips();
+        if (data?.created && data?.body && String(data.body).trim().length > 10) {
+          useClipStore.getState().processClipAI(data.clipId, data.body);
+        } else {
+          useClipStore.getState().updateProcessingJob(data.clipId, 'done');
+        }
+        setIsSaved(true);
+        setTimeout(() => router.push('/'), 1500);
+        return;
+      }
+
       // ── Duplicate detection ──────────────────────────────────────────
       const existingClips = useClipStore.getState().clips;
       let inheritedClip: (typeof existingClips)[0] | null = null;
-      if (mode === 'url' && finalUrl) {
-        inheritedClip = existingClips.find(c => c.url === finalUrl) ?? null;
-      } else if (mode === 'upload' && file) {
+      if (mode === 'upload' && file) {
         inheritedClip = existingClips.find(c => c.domain === file.name) ?? null;
       }
 
       let fileUrl = '';
       let sourceType = mode;
-      let domain = null;
       let extractedData: any = null;
 
       // 1. File Upload Processing
@@ -386,82 +377,24 @@ function AddClipForm() {
         } catch(e) {
           setWarnMsg('ファイルの読み取り中にエラーが発生しました。クリップは保存されますが、テキスト抽出ができませんでした。');
         }
-      } else if (mode === 'url') {
-        if (!finalUrl) throw new Error("URLを入力してください");
       }
 
-      const isYouTubeUrl = mode === 'url' && (finalUrl.includes('youtube.com') || finalUrl.includes('youtu.be'));
-      const contentType = mode === 'diary' ? 'note' : mode === 'url' ? (isYouTubeUrl ? 'video' : 'article') : (sourceType === 'upload' ? 'document' : sourceType);
-
-      if (mode === 'url') {
-        if (!finalUrl) throw new Error("URLを入力してください");
-        try {
-          domain = new URL(finalUrl).hostname;
-          if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
-             const ytRes = await fetch('/api/youtube', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: finalUrl })
-              });
-             if(ytRes.ok) {
-                 const ytData = await ytRes.json();
-                 extractedData = ytData; // body will contain transcript
-
-                 // Optionally get title and thumbnail from base extractor
-                 try {
-                   const extRes = await fetch('/api/extract', {
-                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: finalUrl })
-                   });
-                   if(extRes.ok) {
-                      const ogData = await extRes.json();
-                      extractedData.title = ogData.title || extractedData.title;
-                      extractedData.thumbnail = ogData.thumbnail;
-                      extractedData.domain = ogData.domain;
-                   }
-                 } catch(e) {}
-             } else {
-                 const message = await readApiError(ytRes);
-                 console.warn("YouTube transcript fetch failed", message);
-                 setWarnMsg(`YouTube字幕の取得に失敗しました。タイトル取得だけで保存します。(${message})`);
-             }
-          } else {
-            const extRes = await fetch('/api/extract', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ url: finalUrl })
-            });
-            if (extRes.ok) {
-              extractedData = await extRes.json();
-            } else {
-               const message = await readApiError(extRes);
-               console.warn("Extraction failed", message);
-               setWarnMsg(`URLの本文抽出に失敗しました。タイトル未取得のまま保存します。(${message})`);
-            }
-          }
-        } catch(e) {
-          console.warn("Extraction failed", e);
-          const message = e instanceof Error ? e.message : '不明なエラー';
-          setWarnMsg(`URLの本文抽出に失敗しました。タイトル未取得のまま保存します。(${message})`);
-        }
-      }
+      const contentType = mode === 'diary' ? 'note' : (sourceType === 'upload' ? 'document' : sourceType);
 
       const finalTitle = title || (
-        mode === 'url' ? deriveReadableTitle(extractedData?.title, extractedData?.body || extractedData?.description, '無題の記事') :
         mode === 'diary' ? `日記 (${new Date().toLocaleDateString('ja-JP')})` :
         file?.name || '新しいファイル'
       );
-
-      const finalDomain = (mode === 'url' && extractedData?.domain) ? extractedData.domain : domain;
 
       // ====== DB Insertion ======
       const { data: clipData, error: clipError } = await supabase.from('clips').insert({
         user_id: session.user.id,
         title: finalTitle,
-        url: mode === 'url' ? finalUrl : fileUrl,
+        url: fileUrl,
         content_type: contentType,
         my_note: note,
         is_read: false,
-        source_domain: mode === 'url' ? finalDomain : (file ? file.name : null),
+        source_domain: file ? file.name : null,
         preview_image_url: extractedData?.thumbnail || inheritedClip?.thumbnail || null,
         extracted_content: extractedData?.body || null,
         summary: inheritedClip?.summary || null,
@@ -474,6 +407,13 @@ function AddClipForm() {
       if (clipError) throw new Error(`クリップ保存失敗: ${clipError.message}`);
       
       const clipId = clipData.id;
+
+      const { error: saveError } = await supabase.from('clip_saves').insert({
+        user_id: session.user.id,
+        clip_id: clipId,
+        my_note: note,
+      });
+      if (saveError) throw new Error(`保存状態の作成に失敗しました: ${saveError.message}`);
 
       // Insert tags — merge user tags with inherited tags from duplicate
       const allTags = [...new Set([...tags, ...(inheritedClip?.tags ?? [])])];

@@ -126,8 +126,31 @@ const DETAIL_CLIP_SELECT = `
   key_points
 `;
 
-const mapClipRow = (d: any, saveCount = 0): Clip => {
+const SAVED_CLIP_SELECT = `
+  my_note,
+  is_bookmarked,
+  is_read,
+  is_archived,
+  created_at,
+  clips (
+    ${LIST_CLIP_SELECT}
+  )
+`;
+
+const SAVED_CLIP_DETAIL_SELECT = `
+  my_note,
+  is_bookmarked,
+  is_read,
+  is_archived,
+  created_at,
+  clips (
+    ${DETAIL_CLIP_SELECT}
+  )
+`;
+
+const mapClipRow = (d: any, saveCount = 0, save?: any): Clip => {
   const type = typeMapping[d.content_type] || 'url';
+  const savedAt = save?.created_at ?? d.created_at;
   return {
     id: d.id,
     type: type,
@@ -137,17 +160,17 @@ const mapClipRow = (d: any, saveCount = 0): Clip => {
     body: d.extracted_content,
     url: d.url,
     domain: d.source_domain,
-    date: new Date(d.created_at).toLocaleDateString('ja-JP'),
-    timestamp: new Date(d.created_at).getTime(),
-    isUnread: !d.is_read,
+    date: new Date(savedAt).toLocaleDateString('ja-JP'),
+    timestamp: new Date(savedAt).getTime(),
+    isUnread: save ? !save.is_read : !d.is_read,
     stage2: !!d.summary,
-    isArchived: d.is_archived ?? false,
-    isBookmarked: d.is_bookmarked,
+    isArchived: save ? (save.is_archived ?? false) : (d.is_archived ?? false),
+    isBookmarked: save ? (save.is_bookmarked ?? false) : d.is_bookmarked,
     isGlobalSearch: d.is_global_search ?? false,
     thumbnail: d.preview_image_url,
     tags: d.clip_tags?.map((t: any) => t.name) || [],
     collections: d.clip_collections?.map((c: any) => c.collection_id) || [],
-    userNote: d.my_note,
+    userNote: save ? save.my_note : d.my_note,
     category: d.category ?? null,
     subcategory: d.subcategory ?? null,
     keyPoints: d.key_points ?? null,
@@ -316,29 +339,36 @@ export const useClipStore = create<ClipStore>()(
       }
 
       const { data, error } = await supabase
-        .from('clips')
-        .select(LIST_CLIP_SELECT)
+        .from('clip_saves')
+        .select(SAVED_CLIP_SELECT)
+        .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       if (data) {
-        const parsedClips: Clip[] = data.map((d: any) => mapClipRow(d, getStore().clips.find(c => c.id === d.id)?.saveCount ?? 0));
+        const parsedClips: Clip[] = data
+          .map((save: any) => {
+            const clipRow = Array.isArray(save.clips) ? save.clips[0] : save.clips;
+            if (!clipRow) return null;
+            return mapClipRow(clipRow, getStore().clips.find(c => c.id === clipRow.id)?.saveCount ?? 0, save);
+          })
+          .filter(Boolean) as Clip[];
         set({ clips: parsedClips, isLoading: false });
 
         const clipIds = parsedClips.map(clip => clip.id);
         if (clipIds.length > 0) {
           void (async () => {
             const { data: counts, error: countError } = await supabase
-              .from('clips')
-              .select('saved_from_clip_id')
-              .in('saved_from_clip_id', clipIds);
+              .from('clip_saves')
+              .select('clip_id')
+              .in('clip_id', clipIds);
 
             if (countError || !counts) return;
 
             const saveCounts: Record<string, number> = {};
             counts.forEach((c: any) => {
-              if (c.saved_from_clip_id) saveCounts[c.saved_from_clip_id] = (saveCounts[c.saved_from_clip_id] ?? 0) + 1;
+              if (c.clip_id) saveCounts[c.clip_id] = (saveCounts[c.clip_id] ?? 0) + 1;
             });
 
             set(state => ({
@@ -364,15 +394,18 @@ export const useClipStore = create<ClipStore>()(
       if (!session) return null;
 
       const { data, error } = await supabase
-        .from('clips')
-        .select(DETAIL_CLIP_SELECT)
-        .eq('id', id)
+        .from('clip_saves')
+        .select(SAVED_CLIP_DETAIL_SELECT)
+        .eq('user_id', session.user.id)
+        .eq('clip_id', id)
         .single();
 
       if (error) throw error;
 
       const current = getStore().clips.find(clip => clip.id === id);
-      const parsed = mapClipRow(data, current?.saveCount ?? 0);
+      const clipRow = Array.isArray(data.clips) ? data.clips[0] : data.clips;
+      if (!clipRow) return null;
+      const parsed = mapClipRow(clipRow, current?.saveCount ?? 0, data);
       set(state => {
         const exists = state.clips.some(clip => clip.id === id);
         return {
@@ -411,19 +444,23 @@ export const useClipStore = create<ClipStore>()(
     
     // Map Partial<Clip> to Supabase columns
     const dbUpdates: any = {};
-    if (updates.userNote !== undefined) dbUpdates.my_note = updates.userNote;
     if (updates.title !== undefined) dbUpdates.title = updates.title;
-    if (updates.isArchived !== undefined) dbUpdates.is_archived = updates.isArchived;
     if (updates.category !== undefined) dbUpdates.category = updates.category;
     if (updates.subcategory !== undefined) dbUpdates.subcategory = updates.subcategory;
     if (updates.keyPoints !== undefined) dbUpdates.key_points = updates.keyPoints;
     if (updates.isGlobalSearch !== undefined) dbUpdates.is_global_search = updates.isGlobalSearch;
+    const saveUpdates: any = {};
+    if (updates.userNote !== undefined) saveUpdates.my_note = updates.userNote;
+    if (updates.isArchived !== undefined) saveUpdates.is_archived = updates.isArchived;
 
-    // If no db mapped updates, just return
-    if (Object.keys(dbUpdates).length === 0) return;
-
-    const { error } = await supabase.from('clips').update(dbUpdates).eq('id', id);
-    if (error) {
+    const clipUpdate = Object.keys(dbUpdates).length > 0
+      ? await supabase.from('clips').update(dbUpdates).eq('id', id)
+      : { error: null };
+    const saveUpdate = Object.keys(saveUpdates).length > 0
+      ? await supabase.from('clip_saves').update(saveUpdates).eq('clip_id', id)
+      : { error: null };
+    if (clipUpdate.error || saveUpdate.error) {
+       const error = clipUpdate.error ?? saveUpdate.error;
        console.error("Update error", error);
        set({ clips: currentClips }); // rollback
     }
@@ -431,7 +468,7 @@ export const useClipStore = create<ClipStore>()(
 
   deleteClip: async (id) => {
     const supabase = createClient();
-    const { error } = await supabase.from('clips').delete().eq('id', id);
+    const { error } = await supabase.from('clip_saves').delete().eq('clip_id', id);
     if (error) {
       console.error("Delete error", error);
       throw error;
@@ -444,7 +481,7 @@ export const useClipStore = create<ClipStore>()(
 
   archiveClip: async (id, archive = true) => {
     const supabase = createClient();
-    const { error } = await supabase.from('clips').update({ is_archived: archive }).eq('id', id);
+    const { error } = await supabase.from('clip_saves').update({ is_archived: archive }).eq('clip_id', id);
     if (error) {
       console.error("Archive error", error);
       throw error;
@@ -469,9 +506,9 @@ export const useClipStore = create<ClipStore>()(
     // Update DB
     const supabase = createClient();
     const { error } = await supabase
-      .from('clips')
+      .from('clip_saves')
       .update({ is_read: nextIsRead })
-      .eq('id', id);
+      .eq('clip_id', id);
 
     if (error) {
       console.error('Error updating read status:', error);
@@ -494,9 +531,9 @@ export const useClipStore = create<ClipStore>()(
     // Update DB
     const supabase = createClient();
     const { error } = await supabase
-      .from('clips')
+      .from('clip_saves')
       .update({ is_bookmarked: nextIsBookmarked })
-      .eq('id', id);
+      .eq('clip_id', id);
 
     if (error) {
       console.error('Error updating bookmark status:', error);

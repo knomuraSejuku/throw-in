@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { normalizeClipUrl } from '@/lib/url-normalize';
 
 export const runtime = 'nodejs';
 
 const MAX_BATCH_URLS = 200;
-const MAX_RETRIES = 2;
 
 type BatchExtractResult = {
   url: string;
@@ -36,74 +36,6 @@ async function getAuthedSupabase() {
   return { supabase, user };
 }
 
-function normalizeUrl(rawUrl: string): string {
-  const parsed = new URL(rawUrl.trim());
-  const host = parsed.hostname.replace(/^(www\.|m\.)/, '');
-
-  if (host === 'twitter.com' || host === 'x.com') {
-    return `https://x.com${parsed.pathname}`.replace(/\/$/, '');
-  }
-
-  if (host === 'youtube.com' || host === 'music.youtube.com') {
-    if (parsed.pathname === '/watch') {
-      const videoId = parsed.searchParams.get('v');
-      return videoId ? `https://${parsed.hostname}/watch?v=${videoId}` : parsed.origin + parsed.pathname;
-    }
-    return parsed.origin + parsed.pathname;
-  }
-
-  if (host === 'youtu.be') {
-    return `https://youtu.be${parsed.pathname}`;
-  }
-
-  const normalizedPath = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/$/, '');
-  return `${parsed.protocol}//${host}${normalizedPath}`;
-}
-
-function isYouTubeUrl(url: string): boolean {
-  return url.includes('youtube.com') || url.includes('youtu.be');
-}
-
-async function readApiError(response: Response): Promise<string> {
-  try {
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const data = await response.clone().json();
-      return String(data?.error || data?.detail || response.statusText || response.status);
-    }
-    const text = await response.text();
-    return text.slice(0, 300) || response.statusText || `HTTP ${response.status}`;
-  } catch {
-    return response.statusText || `HTTP ${response.status}`;
-  }
-}
-
-async function fetchJsonWithRetry(origin: string, pathname: string, url: string) {
-  let lastError = '';
-
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetch(`${origin}${pathname}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-
-      if (res.ok) return await res.json();
-
-      lastError = await readApiError(res);
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-
-    if (attempt < MAX_RETRIES) {
-      await new Promise(resolve => setTimeout(resolve, 750 * attempt));
-    }
-  }
-
-  throw new Error(lastError || 'Extraction failed');
-}
-
 export async function POST(req: NextRequest) {
   const { supabase, user } = await getAuthedSupabase();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -121,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (!url) continue;
 
     try {
-      const normalizedUrl = normalizeUrl(url);
+      const normalizedUrl = normalizeClipUrl(url);
       if (seen.has(normalizedUrl)) {
         results.push({ url, normalizedUrl, status: 'skipped', reason: 'duplicate' });
         continue;
@@ -157,66 +89,25 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      let extractedData: {
-        title?: string | null;
-        body?: string | null;
-        thumbnail?: string | null;
-        domain?: string | null;
-      } | null = null;
-
-      if (isYouTubeUrl(normalizedUrl)) {
-        try {
-          extractedData = await fetchJsonWithRetry(req.nextUrl.origin, '/api/youtube', normalizedUrl);
-        } catch {
-          extractedData = null;
-        }
-
-        try {
-          const ogData = await fetchJsonWithRetry(req.nextUrl.origin, '/api/extract', normalizedUrl);
-          extractedData = {
-            ...extractedData,
-            title: ogData.title || extractedData?.title,
-            thumbnail: ogData.thumbnail || extractedData?.thumbnail,
-            domain: ogData.domain || extractedData?.domain,
-            body: extractedData?.body || ogData.body,
-          };
-        } catch {
-          // Keep transcript-only data when available.
-        }
-      } else {
-        extractedData = await fetchJsonWithRetry(req.nextUrl.origin, '/api/extract', normalizedUrl);
-      }
-
-      const parsedUrl = new URL(normalizedUrl);
-      const title = extractedData?.title || normalizedUrl;
-      const sourceDomain = extractedData?.domain || parsedUrl.hostname;
-      const contentType = isYouTubeUrl(normalizedUrl) ? 'video' : 'article';
-
-      const { data: inserted, error: insertError } = await supabase
-        .from('clips')
-        .insert({
-          user_id: user.id,
-          title,
-          url: normalizedUrl,
-          content_type: contentType,
-          is_read: false,
-          source_domain: sourceDomain,
-          preview_image_url: extractedData?.thumbnail || null,
-          extracted_content: extractedData?.body || null,
-          is_global_search: false,
-        })
-        .select('id, title')
-        .single();
-
-      if (insertError) throw new Error(insertError.message);
+      const saveRes = await fetch(`${req.nextUrl.origin}/api/clips/url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          cookie: req.headers.get('cookie') || '',
+        },
+        body: JSON.stringify({ url: normalizedUrl }),
+      });
+      const saved = await saveRes.json().catch(() => null);
+      if (!saveRes.ok) throw new Error(saved?.error || 'URL save failed');
 
       results.push({
         url,
         normalizedUrl,
-        status: 'created',
-        clipId: inserted.id,
-        title: inserted.title,
-        body: extractedData?.body || null,
+        status: saved.created ? 'created' : 'skipped',
+        clipId: saved.clipId,
+        title: saved.normalizedUrl,
+        body: saved.body || null,
+        reason: saved.created ? undefined : 'duplicate',
       });
     } catch (error) {
       results.push({

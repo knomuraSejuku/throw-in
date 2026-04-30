@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { normalizeClipUrl } from '@/lib/url-normalize';
 
 export const runtime = 'nodejs';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const GENERIC_CLIP_TITLES = new Set(['x post', 'x article', 'twitter post', '無題の記事']);
-
-type ExtractedData = {
-  title?: string | null;
-  body?: string | null;
-  description?: string | null;
-  thumbnail?: string | null;
-  domain?: string | null;
-};
 
 async function getAuthedSupabase() {
   const cookieStore = await cookies();
@@ -33,97 +25,11 @@ async function getAuthedSupabase() {
   return { supabase, user };
 }
 
-function normalizeUrl(rawUrl: string): string {
-  const parsed = new URL(rawUrl.trim());
-  const host = parsed.hostname.replace(/^(www\.|m\.)/, '');
-
-  if (host === 'twitter.com' || host === 'x.com') {
-    return `https://x.com${parsed.pathname}`.replace(/\/$/, '');
-  }
-
-  if (host === 'youtube.com' || host === 'music.youtube.com') {
-    if (parsed.pathname === '/watch') {
-      const videoId = parsed.searchParams.get('v');
-      return videoId ? `https://${parsed.hostname}/watch?v=${videoId}` : parsed.origin + parsed.pathname;
-    }
-    return parsed.origin + parsed.pathname;
-  }
-
-  if (host === 'youtu.be') {
-    return `https://youtu.be${parsed.pathname}`;
-  }
-
-  const normalizedPath = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/$/, '');
-  return `${parsed.protocol}//${host}${normalizedPath}`;
-}
-
 function getSharedUrl(urlValue: string, textValue: string): string | null {
   const direct = urlValue.trim();
   if (direct) return direct;
   const match = textValue.match(/https?:\/\/[^\s"',)]+/);
   return match?.[0] ?? null;
-}
-
-function deriveReadableTitle(rawTitle: string | undefined | null, extractedBody: string | undefined | null, fallback: string) {
-  const candidate = (rawTitle ?? '').trim();
-  if (candidate && !GENERIC_CLIP_TITLES.has(candidate.toLowerCase())) return candidate;
-
-  const firstLine = (extractedBody ?? '')
-    .split('\n')
-    .map(line => line.trim())
-    .find(line => line && !line.startsWith('投稿内リンク:') && !/^https?:\/\//.test(line));
-
-  if (!firstLine) return fallback;
-  return firstLine.length > 80 ? `${firstLine.slice(0, 79).trim()}...` : firstLine;
-}
-
-function isYouTubeUrl(url: string): boolean {
-  return url.includes('youtube.com') || url.includes('youtu.be');
-}
-
-async function readApiError(response: Response): Promise<string> {
-  try {
-    const data = await response.clone().json();
-    return String(data?.error || data?.detail || response.statusText || response.status);
-  } catch {
-    return response.statusText || `HTTP ${response.status}`;
-  }
-}
-
-async function fetchExtractor(origin: string, pathname: string, url: string): Promise<ExtractedData> {
-  const res = await fetch(`${origin}${pathname}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
-  });
-  if (!res.ok) throw new Error(await readApiError(res));
-  return await res.json();
-}
-
-async function extractUrl(origin: string, url: string): Promise<ExtractedData | null> {
-  if (isYouTubeUrl(url)) {
-    let extracted: ExtractedData | null = null;
-    try {
-      extracted = await fetchExtractor(origin, '/api/youtube', url);
-    } catch {
-      extracted = null;
-    }
-
-    try {
-      const ogData = await fetchExtractor(origin, '/api/extract', url);
-      return {
-        ...extracted,
-        title: ogData.title || extracted?.title,
-        thumbnail: ogData.thumbnail || extracted?.thumbnail,
-        domain: ogData.domain || extracted?.domain,
-        body: extracted?.body || ogData.body,
-      };
-    } catch {
-      return extracted;
-    }
-  }
-
-  return await fetchExtractor(origin, '/api/extract', url);
 }
 
 async function extractImageText(file: File): Promise<string | null> {
@@ -228,48 +134,31 @@ export async function POST(req: NextRequest) {
         is_global_search: false,
       }).select('id').single();
       if (error) throw new Error(error.message);
+      const { error: saveError } = await supabase.from('clip_saves').insert({
+        user_id: user.id,
+        clip_id: inserted.id,
+        my_note: sharedText && sharedText !== sharedUrl ? sharedText : '',
+      });
+      if (saveError) throw new Error(saveError.message);
 
       return redirectWithStatus(req, 'saved', undefined, inserted.id);
     }
 
     if (sharedUrl) {
-      const normalizedUrl = normalizeUrl(sharedUrl);
-      const { data: existing, error: existingError } = await supabase
-        .from('clips')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('url', normalizedUrl)
-        .maybeSingle();
-      if (existingError) throw new Error(existingError.message);
-      if (existing) return redirectWithStatus(req, 'duplicate');
-
-      let extractedData: ExtractedData | null = null;
-      try {
-        extractedData = await extractUrl(req.nextUrl.origin, normalizedUrl);
-      } catch (error) {
-        console.warn('[share-target:extract_failed]', error);
-      }
-
-      const parsedUrl = new URL(normalizedUrl);
-      const body = extractedData?.body || extractedData?.description || null;
-      const title = sharedTitle || deriveReadableTitle(extractedData?.title, body, normalizedUrl);
+      const normalizedUrl = normalizeClipUrl(sharedUrl);
       const note = sharedText.replace(sharedUrl, '').trim();
+      const saveRes = await fetch(`${req.nextUrl.origin}/api/clips/url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          cookie: req.headers.get('cookie') || '',
+        },
+        body: JSON.stringify({ url: normalizedUrl, title: sharedTitle, note }),
+      });
+      const saved = await saveRes.json().catch(() => null);
+      if (!saveRes.ok) throw new Error(saved?.error || '保存に失敗しました。');
 
-      const { data: inserted, error } = await supabase.from('clips').insert({
-        user_id: user.id,
-        title,
-        url: normalizedUrl,
-        content_type: isYouTubeUrl(normalizedUrl) ? 'video' : 'article',
-        my_note: note,
-        is_read: false,
-        source_domain: extractedData?.domain || parsedUrl.hostname,
-        preview_image_url: extractedData?.thumbnail || null,
-        extracted_content: body,
-        is_global_search: true,
-      }).select('id').single();
-      if (error) throw new Error(error.message);
-
-      return redirectWithStatus(req, 'saved', undefined, inserted.id);
+      return redirectWithStatus(req, saved.created ? 'saved' : 'duplicate', undefined, saved.clipId);
     }
 
     if (sharedText) {
@@ -284,6 +173,12 @@ export async function POST(req: NextRequest) {
         is_global_search: false,
       }).select('id').single();
       if (error) throw new Error(error.message);
+      const { error: saveError } = await supabase.from('clip_saves').insert({
+        user_id: user.id,
+        clip_id: inserted.id,
+        my_note: sharedText,
+      });
+      if (saveError) throw new Error(saveError.message);
 
       return redirectWithStatus(req, 'saved', undefined, inserted.id);
     }

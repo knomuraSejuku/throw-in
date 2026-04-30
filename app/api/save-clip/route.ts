@@ -21,7 +21,7 @@ async function getAuthedSupabase() {
   return { supabase, user };
 }
 
-// POST /api/save-clip — copy a public clip into the authenticated user's library
+// POST /api/save-clip — save a public clip into the authenticated user's library without copying the clip body.
 export async function POST(req: NextRequest) {
   const { supabase, user } = await getAuthedSupabase();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -45,31 +45,29 @@ export async function POST(req: NextRequest) {
   if (srcErr || !src) return NextResponse.json({ error: 'Clip not found or not public' }, { status: 404 });
   if (src.user_id === user.id) return NextResponse.json({ error: 'Already yours' }, { status: 409 });
 
-  // Check for duplicate save
+  const targetClipId = src.normalized_url
+    ? (await anonClient
+        .from('clips')
+        .select('id')
+        .eq('normalized_url', src.normalized_url)
+        .in('content_type', ['article', 'video'])
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()).data?.id ?? clipId
+    : clipId;
+
+  // Check for duplicate save.
   const { data: existing } = await supabase
-    .from('clips')
+    .from('clip_saves')
     .select('id')
     .eq('user_id', user.id)
-    .eq('saved_from_clip_id', clipId)
+    .eq('clip_id', targetClipId)
     .maybeSingle();
   if (existing) return NextResponse.json({ error: 'Already saved' }, { status: 409 });
 
-  const { error: insertErr } = await supabase.from('clips').insert({
+  const { error: insertErr } = await supabase.from('clip_saves').insert({
     user_id: user.id,
-    title: src.title,
-    url: src.url,
-    source_domain: src.source_domain,
-    preview_image_url: src.preview_image_url,
-    content_type: src.content_type,
-    summary: src.summary,
-    extracted_content: src.extracted_content,
-    my_note: null,
-    key_points: src.key_points,
-    embedding: src.embedding,
-    category: src.category,
-    subcategory: src.subcategory,
-    is_global_search: false,
-    saved_from_clip_id: clipId,
+    clip_id: targetClipId,
   });
 
   if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
