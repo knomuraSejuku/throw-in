@@ -71,9 +71,9 @@ export default function LoginPage() {
               className="mb-8 h-36 w-36 rounded-[32px] border border-outline-variant/60 bg-surface-container-lowest object-cover xl:h-40 xl:w-40"
               priority
             />
-            <h1 className="text-[3.05rem] xl:text-[3.65rem] leading-[1.16] tracking-normal font-light text-on-surface mb-6">
-              投げ入れるように、<br />
-              “気になる”を整理しよう。
+            <h1 className="text-[4rem] xl:text-[5rem] leading-[1.12] tracking-normal font-light text-on-surface mb-6">
+              投げ入れる。<br />
+              それだけ。
             </h1>
             
             <p className="text-xl text-on-surface-variant font-normal leading-relaxed max-w-lg">
