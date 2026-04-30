@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dns from 'dns/promises';
-import { Readability } from '@mozilla/readability';
-import { JSDOM } from 'jsdom';
+import * as cheerio from 'cheerio';
 
 export const runtime = 'nodejs';
 
@@ -171,12 +170,28 @@ function getReadableXTitle(rawTitle: string, description: string, embedHtml: str
 
 function extractMainText(html: string): string {
   try {
-    const dom = new JSDOM(html);
-    const article = new Readability(dom.window.document).parse();
-    const text = article?.textContent ? normalizeArticleText(article.textContent) : '';
-    if (text.length > 80) return text;
+    const $ = cheerio.load(html);
+    $('script, style, noscript, svg, nav, footer, iframe, form, aside').remove();
+
+    const candidates = [
+      'article',
+      'main',
+      '[role="main"]',
+      '.article',
+      '.post',
+      '.entry-content',
+      '.post-content',
+      '.article-content',
+      '.content',
+      'body',
+    ];
+
+    for (const selector of candidates) {
+      const text = normalizeArticleText($(selector).first().text());
+      if (text.length > 80) return text;
+    }
   } catch (error) {
-    console.warn('[extract:readability_failed]', error instanceof Error ? error.message : String(error));
+    console.warn('[extract:cheerio_failed]', error instanceof Error ? error.message : String(error));
   }
 
   const articleMatch = /<article\b[^>]*>([\s\S]*?)<\/article>/i.exec(html);
