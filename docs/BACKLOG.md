@@ -726,18 +726,19 @@
     - `ReactMarkdown` / prose系class / `whitespace-pre-wrap` / Markdown先頭改行の影響
     - KEY POINTS本文に保存される `key_points` 文字列が先頭に空行を含んでいないか
   - **実装方針:**
-    1. AI SUMMARY本文のフォントサイズ・行間を一段階上げる
-    2. KEY POINTS本文のフォントサイズ・行間も読みやすいサイズへ上げる
+    1. 「AI SUMMARY」「KEY POINTS」というラベル文字そのもののフォントサイズを一段階上げる
+    2. ブロック内本文のフォントサイズは現状維持する
     3. AI SUMMARYとKEY POINTSのブロック間marginを少し広げる
     4. KEY POINTS内部の上部padding/marginを縮める
     5. `keyPoints.trim()` 等で保存済み文字列の先頭/末尾改行表示を抑制する
   - **受け入れ条件:**
-    - PC/スマホどちらでもAI SUMMARYとKEY POINTSが読みやすいサイズで表示される
+    - PC/スマホどちらでも「AI SUMMARY」「KEY POINTS」ラベルが読みやすいサイズで表示される
     - AI SUMMARYとKEY POINTSの境界が詰まりすぎない
     - KEY POINTSブロック本文の上に不自然な大余白が出ない
     - Markdownの見出し・箇条書き・リンク表示が崩れない
   - **実施済み:**
-    - AI SUMMARY本文を `text-base md:text-lg` に拡大し、行間を調整
+    - 「AI SUMMARY」「KEY POINTS」ラベルを `text-xs md:text-sm` / `font-extrabold` に拡大
+    - ブロック内本文サイズは従来の `text-sm md:text-base` / `text-sm` に戻して維持
     - AI SUMMARYとKEY POINTS間の余白を `mb-8` に拡張
     - KEY POINTS本文を `prose-compact` 化し、先頭見出しの大きな上marginを除去
     - `clip.keyPoints.trim()` で余分な改行表示を抑制

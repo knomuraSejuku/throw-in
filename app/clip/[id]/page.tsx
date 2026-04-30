@@ -513,8 +513,8 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
           {/* Summary / AI Note */}
           {clip.summary && (
             <div className="mb-8 p-6 md:p-7 bg-primary/5 border border-primary/20 rounded-2xl relative">
-               <div className="absolute -top-3 left-6 bg-surface px-2 text-[10px] font-bold text-primary tracking-widest uppercase">AI Summary</div>
-               <p className="text-on-surface leading-[1.9] text-base md:text-lg">
+               <div className="absolute -top-4 left-6 bg-surface px-2 text-xs md:text-sm font-extrabold text-primary tracking-widest uppercase">AI Summary</div>
+               <p className="text-on-surface leading-relaxed text-sm md:text-base">
                  {clip.summary.trim()}
                </p>
             </div>
@@ -523,8 +523,8 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
           {/* Key Points */}
           {clip.keyPoints && (
             <div className="mb-12 p-5 md:p-6 bg-surface-container-low border border-outline-variant/30 rounded-2xl relative">
-              <div className="absolute -top-3 left-6 bg-surface px-2 text-[10px] font-bold text-secondary tracking-widest uppercase">Key Points</div>
-              <div className="prose-body prose-compact text-base md:text-[1.0625rem] pt-1">
+              <div className="absolute -top-4 left-6 bg-surface px-2 text-xs md:text-sm font-extrabold text-secondary tracking-widest uppercase">Key Points</div>
+              <div className="prose-body prose-compact text-sm pt-1">
                 <ReactMarkdown>{clip.keyPoints.trim()}</ReactMarkdown>
               </div>
             </div>
