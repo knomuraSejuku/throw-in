@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { AppShell } from '@/components/shell/AppShell';
-import { Search as SearchIcon, FileText, Loader2, Globe, ArrowDownUp, Clock, Tag, X } from 'lucide-react';
+import { Search as SearchIcon, FileText, Loader2, Globe, ArrowDownUp, Clock, Tag, X, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import clsx from 'clsx';
@@ -62,6 +62,8 @@ export default function SearchPage() {
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [selectedTag, setSelectedTag] = useState('');
+  const [aiSearch, setAiSearch] = useState(false);
+  const [aiFallback, setAiFallback] = useState(false);
   const [page, setPage] = useState(1);
 
   const [globalClips, setGlobalClips] = useState<DisplayClip[]>([]);
@@ -78,6 +80,7 @@ export default function SearchPage() {
     if (query) params.set('q', query);
     if (typeFilter !== 'all' && typeFilter !== 'bookmark') params.set('type', typeFilter);
     if (selectedTag) params.set('tag', selectedTag);
+    if (aiSearch && query && !selectedTag) params.set('ai', 'true');
 
     setGlobalLoading(true);
     fetch(`/api/search?${params}`)
@@ -88,10 +91,14 @@ export default function SearchPage() {
           typeLabel: TYPE_LABELS[c.type] ?? c.type,
         }));
         setGlobalClips(clips);
+        setAiFallback(Boolean(data.aiFallback));
       })
-      .catch(() => setGlobalClips([]))
+      .catch(() => {
+        setGlobalClips([]);
+        setAiFallback(false);
+      })
       .finally(() => setGlobalLoading(false));
-  }, [authLoading, query, typeFilter, selectedTag]);
+  }, [authLoading, query, typeFilter, selectedTag, aiSearch]);
 
   const isLoading = authLoading || globalLoading;
 
@@ -197,6 +204,19 @@ export default function SearchPage() {
               </button>
             </div>
           </div>
+
+          <button
+            onClick={() => { setAiSearch(v => !v); setPage(1); }}
+            className={clsx(
+              "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-colors",
+              aiSearch
+                ? "bg-secondary text-on-secondary"
+                : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
+            )}
+          >
+            <Sparkles className="w-4 h-4" />
+            AI検索
+          </button>
 
           {/* Type filter */}
           <div className="flex flex-wrap justify-center gap-2">
@@ -318,6 +338,15 @@ export default function SearchPage() {
               <h2 className="text-xl font-bold text-on-surface">
                 {isLoading ? '検索中...' : `${results.length}件`}
               </h2>
+              {aiSearch && query && (
+                <span className={clsx(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold",
+                  aiFallback ? "bg-outline-variant/20 text-outline" : "bg-secondary-container text-on-secondary-container"
+                )}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {aiFallback ? '通常検索' : 'AI検索'}
+                </span>
+              )}
             </div>
 
             {isLoading ? (

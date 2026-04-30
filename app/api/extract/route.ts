@@ -107,6 +107,24 @@ function getTagText(html: string, tagName: string): string {
   return match?.[1] ? htmlToText(match[1]) : '';
 }
 
+function getLinksFromHtml(html: string): string[] {
+  const links = new Set<string>();
+  const regex = /<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    try {
+      const href = decodeHtmlEntities(match[1]);
+      if (!href.startsWith('http')) continue;
+      const parsed = new URL(href);
+      if (parsed.hostname.includes('twitter.com') || parsed.hostname.includes('x.com')) continue;
+      links.add(parsed.toString());
+    } catch {
+      // Ignore malformed href values.
+    }
+  }
+  return Array.from(links).slice(0, 10);
+}
+
 function htmlToText(html: string): string {
   const withoutNoise = html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
@@ -139,6 +157,59 @@ function extractMainText(html: string): string {
 
   const bodyMatch = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html);
   return htmlToText(bodyMatch?.[1] || html);
+}
+
+function isXUrl(url: URL): boolean {
+  const hostname = url.hostname.replace(/^(www\.|mobile\.)/, '');
+  return hostname === 'x.com' || hostname === 'twitter.com';
+}
+
+function isXArticleUrl(url: URL): boolean {
+  return /^\/i\/article\/\d+/.test(url.pathname) || /\/status\/\d+\/article\//.test(url.pathname);
+}
+
+async function fetchXOEmbed(url: URL) {
+  const oembedUrl = new URL('https://publish.twitter.com/oembed');
+  oembedUrl.searchParams.set('url', url.toString());
+  oembedUrl.searchParams.set('omit_script', 'true');
+  oembedUrl.searchParams.set('dnt', 'true');
+
+  const response = await fetchPublicUrl(oembedUrl, { headers: EXTRACT_HEADERS });
+  if (!response.ok) return null;
+  return await response.json().catch(() => null) as { author_name?: string; html?: string; url?: string } | null;
+}
+
+async function extractXContent(url: URL) {
+  const [pageResponse, oembed] = await Promise.allSettled([
+    fetchPublicUrl(url, { headers: EXTRACT_HEADERS }),
+    fetchXOEmbed(url),
+  ]);
+
+  let html = '';
+  if (pageResponse.status === 'fulfilled' && pageResponse.value.ok) {
+    html = await pageResponse.value.text();
+  }
+
+  const embedHtml = oembed.status === 'fulfilled' ? oembed.value?.html || '' : '';
+  const title = getMetaContent(html, 'og:title') || getMetaContent(html, 'twitter:title') || (isXArticleUrl(url) ? 'X Article' : 'X Post');
+  const description = getMetaContent(html, 'og:description') || getMetaContent(html, 'twitter:description') || htmlToText(embedHtml);
+  const thumbnail = getMetaContent(html, 'og:image') || getMetaContent(html, 'twitter:image') || null;
+  const outLinks = [...getLinksFromHtml(embedHtml), ...getLinksFromHtml(html)];
+  const uniqueOutLinks = Array.from(new Set(outLinks)).slice(0, 10);
+  const bodyParts = [
+    description,
+    uniqueOutLinks.length > 0 ? `投稿内リンク:\n${uniqueOutLinks.map(link => `- ${link}`).join('\n')}` : '',
+    isXArticleUrl(url) ? 'X Article URLとして取得。本文全文はX側の公開HTML制限によりOG/oEmbed情報を優先。' : '',
+  ].filter(Boolean);
+
+  return {
+    title,
+    description: description || null,
+    thumbnail,
+    body: bodyParts.join('\n\n').slice(0, 30000),
+    domain: 'x.com',
+    links: uniqueOutLinks,
+  };
 }
 
 async function fetchPublicUrl(url: URL, init?: RequestInit, redirectCount = 0): Promise<Response> {
@@ -183,6 +254,10 @@ export async function POST(req: NextRequest) {
     }
 
     await assertPublicUrl(parsedUrl);
+
+    if (isXUrl(parsedUrl)) {
+      return NextResponse.json(await extractXContent(parsedUrl));
+    }
 
     // Google Workspace URL detection
     if (parsedUrl.hostname === 'docs.google.com') {

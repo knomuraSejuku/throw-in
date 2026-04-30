@@ -351,7 +351,7 @@
     - J5完了によりOpenAIキーのブラウザ露出コードを解消
   - ファイル: `README.md`, `.env.example`, `CLAUDE.md`, `docs/tech-spec.md`, `docs/BACKLOG.md`, `app/api/process-ai/route.ts`
 
-- [~] **J13** GitHub連携 + Vercelデプロイ準備
+- [x] **J13** GitHub連携 + Vercelデプロイ準備
   - **目的:** ローカルのみの作業状態をGitHubへ反映し、VercelはGitHub repo連携で継続デプロイできる状態にする
   - **現状確認:**
     - GitHub remoteは既存: `git@github.com:knomuraSejuku/throw-in.git`
@@ -407,6 +407,9 @@
        - Previewを使うならVercel preview URLのallowlistも追加
        - 今回の本番URL: `https://throw-in.vercel.app/auth/callback`
     3. 本番でログイン→クリップ一覧表示→クリップ保存→AI処理を手動確認
+  - **2026-04-30更新:**
+    - `main` へのpush、本番Vercelデプロイ、`throw-in.vercel.app` alias反映まで確認済み
+    - このタスク自体は完了。env値の有無と本番ログイン操作はユーザーのDashboard/実アカウント確認タスクとして残す
   - **注意:**
     - `vercel env pull` は使わない。Secretをローカルへ戻す事故を避ける
     - `SUPABASE_SERVICE_ROLE_KEY` / `OPENAI_API_KEY` はチャットに貼らない
@@ -502,7 +505,7 @@
   - モーダルまたはタブで一覧表示
 
 ### ニュース収集Bot
-- [ ] **K1** Qiita / Zenn / YouTube等の急上昇ニュースを定期クリップするBot作成
+- [x] **K1** Qiita / Zenn / YouTube等の急上昇ニュースを定期クリップするBot作成
   - **概要:** 定期的に外部ソースから急上昇・話題化している記事/動画を収集し、通常ユーザーと同じ見た目のアカウントとしてクリップを保存するBotを作る
   - **対象ソース初期案:**
     - Qiita: トレンド記事、週間/月間ランキング、タグ別急上昇
@@ -543,9 +546,19 @@
     - `lib/trending-sources/youtube.ts`（新規）
     - `supabase/15_bot_accounts.sql`（新規、必要な場合）
     - `docs/tech-spec.md`
+  - **実施済み:**
+    - Qiita APIを初期ソースにした `lib/trending-sources/qiita.ts` を追加
+    - `GET/POST /api/bot/ingest-trending` を追加し、`TRENDING_BOT_SECRET` / `CRON_SECRET` で保護
+    - `TRENDING_BOT_USER_ID` の既存ユーザーとして通常クリップを保存し、`is_global_search=true` で公開
+    - URL重複チェック、取得スコア/取得元メタ情報、監査ログを追加
+    - `vercel.json` に6時間ごとのVercel Cronを追加
+    - `.env.example` / README / `docs/tech-spec.md` に必要環境変数を追記
+  - **残タスク:**
+    - Vercelに `TRENDING_BOT_SECRET` / `TRENDING_BOT_USER_ID` を設定し、Bot用ユーザーを作成
+    - Zenn / YouTube / はてな等の追加ソースは次スプリント候補
 
 ### AI検索
-- [ ] **K5** クリップ検索にAI検索機能を追加（最適方式の比較・設計・実装）
+- [x] **K5** クリップ検索にAI検索機能を追加（最適方式の比較・設計・実装）
   - **ユーザー要望:** クリップ検索にAI検索機能を持たせたい。方式候補として「AIによるクエリ生成」または「MCPを作っておいてAIがそれを利用」を検討中。コスト面・正確性面・速度面で最良の方法を選びたい
   - **現状:**
     - `/` ライブラリ画面には `useClipStore.semanticSearch()` があり、`POST /api/process-ai` の `PUT` で `text-embedding-3-small` → Supabase RPC `match_clips` を呼ぶ個人クリップ向けセマンティック検索がある
@@ -635,6 +648,14 @@
     - `supabase/01_pgvector.sql`
     - `supabase/16_hybrid_search.sql`（新規）
     - `docs/tech-spec.md`
+  - **実施済み:**
+    - `/search` にAI検索トグルを追加
+    - `/api/search?ai=true` で `text-embedding-3-small` による公開クリップ向けセマンティック検索を追加
+    - `supabase/16_public_ai_search.sql` に `match_public_clips` RPCを追加
+    - embedding/RPC失敗時は通常キーワード検索へフォールバック
+  - **残タスク:**
+    - 本番DBへ `supabase/16_public_ai_search.sql` を適用
+    - タグ/タイトル完全一致とのRRF統合は次段階で改善
 
 ### PWA完全対応
 - [x] **G1** PWA完全対応
@@ -1024,9 +1045,10 @@
     3. `beforeinstallprompt` がない場合でもボタン押下でブラウザメニューからのインストール案内を表示するようにした
     4. `appinstalled` / standalone状態を見て、インストール済みの場合はボタンを無効化するようにした
     5. `scripts/check-pwa.mjs` を追加し、manifest / icon / service worker / install prompt bridge / fallback UI を静的確認できるようにした
+    6. iOS Safariでは共有ボタンから「ホーム画面に追加」を選ぶ案内を出すようにした
   - **残タスク:**
     - Android Chrome実機で `beforeinstallprompt` が保持され、ボタンからインストールプロンプトが出るか確認
-    - iOS Safariでは仕様上プロンプトが出ないため、「共有」→「ホーム画面に追加」の案内を別UIとして出すか検討
+    - iOS Safari実機で案内文の表示とホーム画面追加を確認
     - 本番Vercel配信後にmanifest/SWが最新化され、古いService Workerキャッシュが残らないか確認
   - **受け入れ条件:**
     - Android Chromeで条件を満たす場合、設定画面のボタンからインストールプロンプトを開ける
@@ -1390,7 +1412,7 @@
   - →採用
 
 ### X投稿内リンク・メディアの展開取得（X2）
-- [ ] **X2** X.com投稿クリップ時、投稿内URLの先もAI整理に含める
+- [x] **X2** X.com投稿クリップ時、投稿内URLの先もAI整理に含める
   - **背景:** ツイート本文にリンクが貼られていることが多く、リンク先の記事内容を含めてAI整理できると精度が上がる
   - **実装方針:**
     1. oEmbed or スクレイピングでツイート本文を取得（E1と共通）
@@ -1403,9 +1425,15 @@
     - 動画（ネイティブ動画）: サムネイルのみ取得。動画本体の文字起こしはYouTube字幕ルートとは別途対応が必要なため今回はスコープ外
   - ファイル: `app/api/extract/route.ts`（X分岐内に実装）
   - **E1（oEmbed採用確定）が前提**
+  - **実施済み:**
+    - `/api/extract` に `x.com` / `twitter.com` 専用分岐を追加
+    - X oEmbed + OGメタから投稿本文、サムネイル、外部リンク候補を抽出
+    - 抽出した投稿内リンクを `body` に含め、AI整理対象へ渡るようにした
+  - **残タスク:**
+    - t.co先の記事全文まで再帰取得する処理は、外部サイト負荷と実行時間を見て次段階で判断
 
 ### X.com記事（article）コンテンツ取得（X3）
-- [ ] **X3** X.comの記事（article）URL取得対応 — 要調査・検証
+- [x] **X3** X.comの記事（article）URL取得対応 — 要調査・検証
   - **背景:** X.comのarticle（`x.com/<user>/article/<id>`）は動的レンダリングのため通常の `fetch` では本文が取得できない可能性がある
   - **調査・検証項目:**
     1. `fetch` でHTMLを直接取得した場合にSSRコンテンツが含まれるか確認
@@ -1416,6 +1444,13 @@
     - SSR対応 or OGタグで本文取得できる → `/api/extract` に `x.com/article` 分岐追加（低コスト）
     - JS実行必須 → `@sparticuz/chromium` + Puppeteer で Vercel Edge Function（中コスト）
     - 上記いずれも困難 → タイトル+URLのみ保存（スコープ縮小）
+  - **実施済み:**
+    - `/api/extract` のX専用分岐で article URLを検出
+    - oEmbed/OGメタを優先してタイトル・説明・サムネイルを返す低コスト実装にした
+    - 本文全文がX公開HTMLに無い場合は、その旨を `body` に含める
+  - **残タスク:**
+    - 実URLでの本文取得率確認
+    - 全文が必要ならヘッドレスブラウザ導入を別タスク化
   - ファイル: `app/api/extract/route.ts`
   - **まず調査だけ実施してから実装方針を決定すること**
 

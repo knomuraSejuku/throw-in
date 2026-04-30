@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   const tag = searchParams.get('tag')?.trim() ?? '';
   const userId = searchParams.get('userId') ?? '';
   const following = searchParams.get('following') === 'true';
+  const ai = searchParams.get('ai') === 'true';
   const limit = parseInt(searchParams.get('limit') ?? '50', 10);
 
   const supabase = createClient(
@@ -48,6 +49,51 @@ export async function GET(req: NextRequest) {
     if (followingIds.length === 0) return NextResponse.json({ clips: [] });
   }
 
+  let semanticIds: string[] | null = null;
+  let semanticScores = new Map<string, number>();
+  let aiFallback = false;
+
+  if (ai && q && !following && !userId) {
+    const openAiKey = process.env.OPENAI_API_KEY;
+    if (openAiKey) {
+      try {
+        const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
+          body: JSON.stringify({ model: 'text-embedding-3-small', input: q }),
+        });
+
+        if (embedRes.ok) {
+          const embedData = await embedRes.json();
+          const { data: matches, error: matchError } = await supabase.rpc('match_public_clips', {
+            query_embedding: embedData.data[0].embedding,
+            match_threshold: 0.35,
+            match_count: limit,
+          });
+
+          if (!matchError) {
+            semanticIds = (matches ?? []).map((row: { id: string; similarity: number }) => {
+              semanticScores.set(row.id, row.similarity);
+              return row.id;
+            });
+            if ((semanticIds ?? []).length === 0) return NextResponse.json({ clips: [], ai: true });
+          } else {
+            aiFallback = true;
+            console.warn('[search:semantic_rpc_failed]', { error: matchError.message });
+          }
+        } else {
+          aiFallback = true;
+          console.warn('[search:embedding_failed]', { status: embedRes.status, statusText: embedRes.statusText });
+        }
+      } catch (error) {
+        aiFallback = true;
+        console.warn('[search:semantic_failed]', { error: error instanceof Error ? error.message : String(error) });
+      }
+    } else {
+      aiFallback = true;
+    }
+  }
+
   let query = supabase
     .from('clips')
     .select(`
@@ -59,6 +105,10 @@ export async function GET(req: NextRequest) {
     .eq('is_global_search', true)
     .order('created_at', { ascending: false })
     .limit(limit);
+
+  if (semanticIds) {
+    query = query.in('id', semanticIds);
+  }
 
   if (followingIds !== null) {
     query = query.in('user_id', followingIds);
@@ -75,14 +125,18 @@ export async function GET(req: NextRequest) {
     query = query.eq('clip_tags.name', tag);
   }
 
-  if (q) {
+  if (q && !semanticIds) {
     query = query.or(`title.ilike.%${q}%,summary.ilike.%${q}%`);
   }
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const clips = (data ?? []).map(d => {
+  const sortedData = semanticIds
+    ? [...(data ?? [])].sort((a, b) => (semanticIds ?? []).indexOf(a.id) - (semanticIds ?? []).indexOf(b.id))
+    : (data ?? []);
+
+  const clips = sortedData.map(d => {
     const profile = Array.isArray(d.users) ? d.users[0] : d.users;
     return {
       id: d.id,
@@ -100,8 +154,9 @@ export async function GET(req: NextRequest) {
       userId: d.user_id,
       displayName: profile?.display_name ?? null,
       avatarEmoji: profile?.avatar_emoji ?? '🙂',
+      similarity: semanticScores.get(d.id) ?? null,
     };
   });
 
-  return NextResponse.json({ clips });
+  return NextResponse.json({ clips, ai: ai && q ? !aiFallback : false, aiFallback });
 }

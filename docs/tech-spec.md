@@ -112,3 +112,5 @@ supabase/       # SQLマイグレーション
 | NEXT_PUBLIC_SUPABASE_ANON_KEY | Supabase 匿名キー |
 | SUPABASE_SERVICE_ROLE_KEY | アカウント削除用 (サーバーのみ) |
 | OPENAI_API_KEY | AI処理用 (サーバーのみ) |
+| TRENDING_BOT_SECRET | ニュースBot取り込みAPI保護用 (サーバーのみ) |
+| TRENDING_BOT_USER_ID | ニュースBotとして保存する既存ユーザーID |

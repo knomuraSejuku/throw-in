@@ -28,5 +28,7 @@ Deploy through Vercel's GitHub integration. Configure these environment variable
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `OPENAI_API_KEY` as Sensitive
 - `SUPABASE_SERVICE_ROLE_KEY` as Sensitive, production only unless preview account deletion must be tested
+- `TRENDING_BOT_SECRET` as Sensitive, used by the trending ingest cron endpoint
+- `TRENDING_BOT_USER_ID` as the public.users/auth user id used as the normal-looking bot account
 
 Also configure Supabase Auth redirect URLs for the Vercel production domain.
