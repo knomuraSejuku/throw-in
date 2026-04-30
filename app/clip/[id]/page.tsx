@@ -58,6 +58,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
   const readButtonOriginRef = useRef<{ x: number; y: number } | null>(null);
   const metaRef = useRef<HTMLDivElement>(null);
   const recordedHistory = useRef(false);
+  const detailRequestRef = useRef(0);
 
   useEffect(() => {
     if (clips.length === 0) {
@@ -75,17 +76,14 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
   const clipIsUnread = clip?.isUnread;
 
   useEffect(() => {
-    let cancelled = false;
     if (!needsDetail) return;
 
+    const requestId = detailRequestRef.current + 1;
+    detailRequestRef.current = requestId;
     setIsDetailLoading(true);
     fetchClipDetail(id).finally(() => {
-      if (!cancelled) setIsDetailLoading(false);
+      if (detailRequestRef.current === requestId) setIsDetailLoading(false);
     });
-
-    return () => {
-      cancelled = true;
-    };
   }, [fetchClipDetail, id, needsDetail]);
 
   // Record history when clip is loaded
@@ -148,7 +146,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
     return () => clearTimeout(timer);
   }, [clipId, clipIsUnread, toggleRead]);
 
-  if ((isLoading && !clip) || isDetailLoading) {
+  if ((isLoading && !clip) || (isDetailLoading && !clip)) {
     return (
       <AppShell>
         <div className="flex h-screen items-center justify-center">
