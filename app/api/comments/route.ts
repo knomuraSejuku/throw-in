@@ -34,6 +34,8 @@ const notificationClient = process.env.SUPABASE_SERVICE_ROLE_KEY
     )
   : null;
 
+const commentReadClient = notificationClient ?? anonClient;
+
 type CommentRow = {
   id: string;
   content: string;
@@ -92,27 +94,43 @@ export async function GET(req: NextRequest) {
   if (!clipId) return NextResponse.json({ error: 'clipId required' }, { status: 400 });
 
   // Verify clip is public
-  const { data: clip } = await anonClient.from('clips').select('id').eq('id', clipId).eq('is_global_search', true).single();
+  const { data: clip, error: clipError } = await commentReadClient
+    .from('clips')
+    .select('id')
+    .eq('id', clipId)
+    .eq('is_global_search', true)
+    .maybeSingle();
+  if (clipError) {
+    console.error('[comments:get_clip_failed]', { clipId, error: clipError.message, code: clipError.code });
+    return NextResponse.json({ error: 'Failed to load comments' }, { status: 500 });
+  }
   if (!clip) return NextResponse.json({ error: 'Clip not found or not public' }, { status: 404 });
 
   // Fetch comments
-  const { data: comments, error } = await anonClient
+  const { data: comments, error } = await commentReadClient
     .from('clip_comments')
     .select('id, content, parent_id, created_at, user_id')
     .eq('clip_id', clipId)
     .order('created_at', { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error('[comments:get_comments_failed]', { clipId, error: error.message, code: error.code });
+    return NextResponse.json({ error: 'Failed to load comments' }, { status: 500 });
+  }
 
   const rows = (comments ?? []) as CommentRow[];
   const userIds = [...new Set(rows.map(c => c.user_id))];
   const profilesByUserId: Record<string, UserProfile> = {};
 
   if (userIds.length > 0) {
-    const { data: profiles } = await anonClient
+    const { data: profiles, error: profileError } = await commentReadClient
       .from('users')
       .select('id, display_name, avatar_emoji')
       .in('id', userIds);
+
+    if (profileError) {
+      console.warn('[comments:get_profiles_failed]', { clipId, error: profileError.message, code: profileError.code });
+    }
 
     ((profiles ?? []) as UserProfile[]).forEach(profile => {
       profilesByUserId[profile.id] = profile;
@@ -125,10 +143,14 @@ export async function GET(req: NextRequest) {
   let likedByMe: Set<string> = new Set();
 
   if (commentIds.length > 0) {
-    const { data: likes } = await anonClient
+    const { data: likes, error: likeError } = await commentReadClient
       .from('comment_likes')
       .select('comment_id')
       .in('comment_id', commentIds);
+
+    if (likeError) {
+      console.warn('[comments:get_likes_failed]', { clipId, error: likeError.message, code: likeError.code });
+    }
 
     (likes ?? []).forEach(l => {
       likesByComment[l.comment_id] = (likesByComment[l.comment_id] ?? 0) + 1;
@@ -137,7 +159,7 @@ export async function GET(req: NextRequest) {
     // Check current user's likes
     const { user } = await getAuthedSupabase();
     if (user) {
-      const { data: myLikes } = await anonClient
+      const { data: myLikes } = await commentReadClient
         .from('comment_likes')
         .select('comment_id')
         .eq('user_id', user.id)

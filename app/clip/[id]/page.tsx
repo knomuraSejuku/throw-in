@@ -125,10 +125,10 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
     prevIsUnreadRef.current = clipIsUnread;
   }, [clipIsUnread]);
 
-  // Auto-mark as read after 3 seconds if unread
+  // Auto-mark as read after 5 seconds if unread
   useEffect(() => {
     if (!clipId || !clipIsUnread) return;
-    const timer = setTimeout(() => toggleRead(clipId), 3000);
+    const timer = setTimeout(() => toggleRead(clipId), 5000);
     return () => clearTimeout(timer);
   }, [clipId, clipIsUnread, toggleRead]);
 
@@ -427,10 +427,15 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
           {clip.tags && clip.tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
                {(isTagsExpanded ? clip.tags : clip.tags.slice(0, 5)).map(t => (
-                 <span key={t} className="flex items-center gap-1 px-3 py-1 bg-surface-container-low text-on-surface border border-outline-variant/30 rounded-full text-xs font-bold font-mono">
+                 <button
+                   key={t}
+                   type="button"
+                   onClick={() => router.push(`/?tag=${encodeURIComponent(t)}`)}
+                   className="flex items-center gap-1 px-3 py-1 bg-surface-container-low text-on-surface border border-outline-variant/30 rounded-full text-xs font-bold font-mono hover:bg-surface-container-high transition-colors"
+                 >
                     <Hash className="w-3 h-3 text-primary" />
                     {t}
-                 </span>
+                 </button>
                ))}
                {clip.tags.length > 5 && (
                  <button

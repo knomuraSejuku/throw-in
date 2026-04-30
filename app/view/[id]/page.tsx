@@ -286,10 +286,15 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
                 </span>
               )}
               {clip.tags?.map(t => (
-                <span key={t} className="flex items-center gap-1 px-3 py-1 bg-surface-container-low text-on-surface border border-outline-variant/30 rounded-full text-xs font-bold font-mono">
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => router.push(`/?tag=${encodeURIComponent(t)}`)}
+                  className="flex items-center gap-1 px-3 py-1 bg-surface-container-low text-on-surface border border-outline-variant/30 rounded-full text-xs font-bold font-mono hover:bg-surface-container-high transition-colors"
+                >
                   <Hash className="w-3 h-3 text-primary" />
                   {t}
-                </span>
+                </button>
               ))}
               <button
                 onClick={() => setEditingMeta(true)}
@@ -403,10 +408,15 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
             {clip.tags && clip.tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-8">
                 {clip.tags.map(t => (
-                  <span key={t} className="flex items-center gap-1 px-3 py-1 bg-surface-container-low text-on-surface border border-outline-variant/30 rounded-full text-xs font-bold font-mono">
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => router.push(`/?tag=${encodeURIComponent(t)}`)}
+                    className="flex items-center gap-1 px-3 py-1 bg-surface-container-low text-on-surface border border-outline-variant/30 rounded-full text-xs font-bold font-mono hover:bg-surface-container-high transition-colors"
+                  >
                     <Hash className="w-3 h-3 text-primary" />
                     {t}
-                  </span>
+                  </button>
                 ))}
               </div>
             )}

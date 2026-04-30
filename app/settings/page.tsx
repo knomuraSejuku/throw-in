@@ -499,11 +499,15 @@ export default function SettingsPage() {
               onClick={handleInstall}
               disabled={isInstalled}
               className={clsx(
-                "px-6 py-2.5 bg-surface-container-low hover:bg-surface-container-high text-primary text-sm font-bold rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-                canInstall && "bg-primary text-white hover:bg-primary-container"
+                "px-6 py-2.5 text-sm font-bold rounded-full transition-colors disabled:cursor-not-allowed",
+                isInstalled
+                  ? "bg-surface-container text-on-surface-variant opacity-50"
+                  : canInstall
+                    ? "bg-primary text-on-primary hover:bg-primary-container"
+                    : "bg-surface-container-low text-on-surface-variant border border-outline-variant/60 hover:bg-surface-container-high"
               )}
             >
-              {isInstalled ? 'インストール済み' : 'インストール'}
+              {isInstalled ? 'インストール済み' : canInstall ? 'インストール' : '手順を見る'}
             </button>
           </section>
 

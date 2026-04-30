@@ -20,7 +20,10 @@ export const metadata: Metadata = {
   description: '投げ入れるように、気になる情報を整理する個人ライブラリ。',
   manifest: '/manifest.webmanifest',
   icons: {
-    icon: '/icons/app-icon-192.png',
+    icon: [
+      { url: '/icons/favicon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icons/favicon-16.png', sizes: '16x16', type: 'image/png' },
+    ],
     apple: '/icons/app-icon-192.png',
   },
 };

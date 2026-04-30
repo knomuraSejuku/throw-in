@@ -1,7 +1,7 @@
 'use client';
 
 import { AppShell } from '@/components/shell/AppShell';
-import { Clock, FileText, Image as ImageIcon, File, PenLine, Settings, CheckCircle2, AlertCircle, Loader2, LayoutGrid, List, BookOpen, Filter, Search, Bookmark, ArrowDownUp } from 'lucide-react';
+import { Clock, FileText, Image as ImageIcon, File, PenLine, Settings, CheckCircle2, AlertCircle, Loader2, LayoutGrid, List, BookOpen, Filter, Search, Bookmark, ArrowDownUp, Trash2, Square, CheckSquare } from 'lucide-react';
 import Image from 'next/image';
 import clsx from 'clsx';
 import Link from 'next/link';
@@ -12,7 +12,7 @@ import confetti from 'canvas-confetti';
 
 function LibraryContent() {
   const router = useRouter();
-  const { clips, fetchClips, isLoading, processingJobs, semanticSearch } = useClipStore();
+  const { clips, fetchClips, isLoading, processingJobs, semanticSearch, deleteClip } = useClipStore();
   const { collections } = useCollectionStore();
   const searchParams = useSearchParams();
   const currentFilter = searchParams.get('filter');
@@ -35,6 +35,33 @@ function LibraryContent() {
   
   const [currentSort, setCurrentSort] = useState<'date' | 'saves'>('date');
   const [showTypeFilter, setShowTypeFilter] = useState(false);
+  const [selectedClipIds, setSelectedClipIds] = useState<Set<string>>(new Set());
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
+
+  const goToTag = (tag: string) => {
+    router.push(`/?tag=${encodeURIComponent(tag)}`);
+  };
+
+  const toggleSelected = (clipId: string) => {
+    setSelectedClipIds(prev => {
+      const next = new Set(prev);
+      next.has(clipId) ? next.delete(clipId) : next.add(clipId);
+      return next;
+    });
+  };
+
+  const handleDeleteSelected = async () => {
+    const ids = Array.from(selectedClipIds);
+    if (ids.length === 0 || isDeletingSelected) return;
+    if (!window.confirm(`${ids.length}件のクリップを削除しますか？この操作は取り消せません。`)) return;
+    setIsDeletingSelected(true);
+    try {
+      for (const id of ids) await deleteClip(id);
+      setSelectedClipIds(new Set());
+    } finally {
+      setIsDeletingSelected(false);
+    }
+  };
 
   const setTypeFilter = (type: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -198,6 +225,16 @@ function LibraryContent() {
         
         {/* Modern Controls */}
         <div className="flex flex-wrap items-center gap-2 overflow-x-auto scrollbar-hide w-full sm:w-auto pb-1 sm:pb-0">
+          {selectedClipIds.size > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              disabled={isDeletingSelected}
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all whitespace-nowrap border bg-error/10 text-error border-error/20 hover:bg-error/15 disabled:opacity-50"
+            >
+              {isDeletingSelected ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {selectedClipIds.size}件削除
+            </button>
+          )}
           
           <div className="relative group flex items-center h-9">
             <div className="relative flex items-center h-full">
@@ -402,7 +439,17 @@ function LibraryContent() {
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1">
                             {clip.tags?.slice(0, 5).map(tag => (
-                              <span key={tag} className="text-[10px] bg-surface-container-high px-2 py-0.5 rounded text-on-surface-variant">#{tag}</span>
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  goToTag(tag);
+                                }}
+                                className="text-[10px] bg-surface-container-high px-2 py-0.5 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+                              >
+                                #{tag}
+                              </button>
                             ))}
                             {clip.tags && clip.tags.length > 5 && <span className="text-[10px] text-outline">+{clip.tags.length - 5}</span>}
                           </div>
@@ -424,6 +471,18 @@ function LibraryContent() {
                   "flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 border border-outline-variant/10",
                   clip.isUnread ? "bg-surface-container-lowest shadow-ambient hover:shadow-card-hover hover:-translate-y-0.5" : "bg-surface-container-low hover:bg-surface-container-high"
                 )}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleSelected(clip.id);
+                    }}
+                    className="shrink-0 rounded-lg p-1 text-on-surface-variant hover:text-on-surface"
+                    aria-label={selectedClipIds.has(clip.id) ? '選択解除' : '選択'}
+                  >
+                    {selectedClipIds.has(clip.id) ? <CheckSquare className="h-5 w-5 text-primary" /> : <Square className="h-5 w-5" />}
+                  </button>
                   <div className="hidden sm:block w-32 aspect-video bg-surface-container-highest rounded-lg overflow-hidden relative flex-shrink-0">
                     {clip.thumbnail ? (
                       <Image src={clip.thumbnail} alt="" fill className="object-cover" />
@@ -491,7 +550,14 @@ function LibraryContent() {
                         {heroClip.tags && heroClip.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mb-4">
                             {heroClip.tags.slice(0, 5).map(tag => (
-                              <span key={tag} className="px-2 py-0.5 rounded-full bg-white/15 text-[10px] font-medium text-white/90">#{tag}</span>
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() => goToTag(tag)}
+                                className="px-2 py-0.5 rounded-full bg-white/15 text-[10px] font-medium text-white/90 hover:bg-white/25 transition-colors"
+                              >
+                                #{tag}
+                              </button>
                             ))}
                           </div>
                         )}
@@ -516,13 +582,25 @@ function LibraryContent() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 pb-20">
                 {paginatedClips.map(clip => (
                   <Link href={`/clip/${clip.id}`} key={clip.id} data-clip-id={clip.id} className={clsx(
-                    "group rounded-[32px] p-6 transition-all duration-500 flex flex-col h-full cursor-pointer",
+                    "group relative rounded-[32px] p-6 transition-all duration-500 flex flex-col h-full cursor-pointer",
                     !clip.stage2
                       ? "bg-[#f3f4f6] hover:shadow-ambient hover:-translate-y-1"
                       : clip.isUnread
                         ? "bg-surface-container-lowest shadow-ambient hover:shadow-card-hover hover:-translate-y-1"
                         : "bg-surface-container-low opacity-90 hover:opacity-100"
                   )}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleSelected(clip.id);
+                      }}
+                      className="absolute right-4 top-4 z-10 rounded-full bg-surface-container-lowest/90 p-1.5 text-on-surface-variant shadow-sm opacity-0 transition-opacity hover:text-on-surface group-hover:opacity-100 focus:opacity-100"
+                      aria-label={selectedClipIds.has(clip.id) ? '選択解除' : '選択'}
+                    >
+                      {selectedClipIds.has(clip.id) ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
+                    </button>
                     <div className="flex justify-between items-start mb-4">
                       <span className={clsx(
                         "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
@@ -573,9 +651,18 @@ function LibraryContent() {
                     {clip.tags && clip.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-4 mt-4">
                         {clip.tags.slice(0, 5).map(tag => (
-                          <span key={tag} className="text-[10px] bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full font-medium">
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              goToTag(tag);
+                            }}
+                            className="text-[10px] bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full font-medium hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+                          >
                             #{tag}
-                          </span>
+                          </button>
                         ))}
                         {clip.tags.length > 5 && (
                           <span className="text-[10px] text-outline px-1 py-0.5">+{clip.tags.length - 5}</span>

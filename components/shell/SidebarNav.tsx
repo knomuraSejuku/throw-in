@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Library, Bookmark, History, Settings, FileText, Video, Image as ImageIcon, File, PenLine, Hash, Folder, Plus, ChevronDown, ChevronRight, LayoutGrid, Users, ScrollText, BarChart2, Bell } from 'lucide-react';
+import { Library, Bookmark, History, Settings, FileText, Video, Image as ImageIcon, File, PenLine, Hash, Folder, Plus, ChevronDown, ChevronRight, LayoutGrid, Users, ScrollText, BarChart2, Bell, Search } from 'lucide-react';
 import clsx from 'clsx';
 import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useCollectionStore, useClipStore, CATEGORY_TAXONOMY } from '@/lib/store';
@@ -54,6 +54,7 @@ function SidebarContent() {
     { label: 'ブックマーク', href: '/?filter=bookmarked', icon: Bookmark, isActive: currentFilter === 'bookmarked' },
     { label: '履歴', href: '/history', icon: History, isActive: pathname === '/history' },
     { label: 'フォロー中', href: '/following', icon: Users, isActive: pathname === '/following' },
+    { label: 'グローバル検索', href: '/search', icon: Search, isActive: pathname === '/search' },
   ];
 
   const footerNav = [

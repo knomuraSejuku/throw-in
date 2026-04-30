@@ -84,8 +84,8 @@ export default function PrivacyPage() {
             </p>
             <p className="text-on-surface-variant">
               メール:{' '}
-              <a href="mailto:knomura@sejuku.net" className="text-primary hover:underline">
-                knomura@sejuku.net
+              <a href="mailto:knomura@cyder.studio" className="text-primary hover:underline">
+                knomura@cyder.studio
               </a>
             </p>
           </section>

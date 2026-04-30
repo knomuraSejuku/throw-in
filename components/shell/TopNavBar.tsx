@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { Bell, Globe, Settings, LogOut, User } from 'lucide-react';
+import { Bell, Settings, LogOut, User } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/supabase/client';
@@ -82,10 +82,6 @@ export function TopNavBar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <Link href="/search" className="p-2 rounded-full hover:bg-surface-container transition-colors text-on-surface-variant">
-          <Globe className="w-5 h-5" />
-        </Link>
-
         {user && (
           <Link href="/notifications" onClick={() => setUnreadCount(0)}
             className="relative p-2 rounded-full hover:bg-surface-container transition-colors text-on-surface-variant">

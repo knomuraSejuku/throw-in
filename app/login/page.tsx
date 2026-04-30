@@ -71,8 +71,9 @@ export default function LoginPage() {
               className="mb-10 h-40 w-40 rounded-[32px] border border-outline-variant/60 bg-surface-container-lowest object-cover"
               priority
             />
-            <h1 className="text-[3.5rem] xl:text-[5rem] leading-[1.12] tracking-normal font-light text-on-surface mb-6">
-              投げ入れるように、
+            <h1 className="text-[3.25rem] xl:text-[4.5rem] leading-[1.15] tracking-normal font-light text-on-surface mb-6">
+              投げ入れるように、<br />
+              “気になる”を整理しよう。
             </h1>
             
             <p className="text-xl text-on-surface-variant font-normal leading-relaxed max-w-lg">
@@ -99,7 +100,7 @@ export default function LoginPage() {
               className="absolute left-4 top-2 xl:left-8 bg-surface-container-lowest border border-outline-variant/70 text-on-surface px-6 py-4 rounded-[18px] shadow-ambient flex items-center gap-3"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-on-surface" />
-              <span className="text-sm font-medium">投げ入れる</span>
+              <span className="text-sm font-medium">自動要約</span>
             </motion.div>
 
             <motion.div 
@@ -119,7 +120,7 @@ export default function LoginPage() {
               className="absolute left-[25%] xl:left-[30%] top-20 bg-primary text-on-primary px-6 py-4 rounded-[18px] shadow-primary flex items-center gap-3 z-10"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-on-primary" />
-              <span className="text-sm font-medium">整理される</span>
+              <span className="text-sm font-medium">スマートタグ付け</span>
             </motion.div>
 
             <motion.div 
@@ -139,7 +140,7 @@ export default function LoginPage() {
               className="absolute right-[8%] xl:right-[15%] top-8 bg-surface-container-lowest border border-outline-variant/70 text-on-surface px-6 py-4 rounded-[18px] shadow-ambient flex items-center gap-3"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-on-surface" />
-              <span className="text-sm font-medium">あとで探せる</span>
+              <span className="text-sm font-medium">データ抽出</span>
             </motion.div>
           </div>
         </div>
@@ -232,7 +233,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-surface-container hover:bg-surface-container-high text-on-surface-variant font-medium rounded-[20px] transition-all border border-outline-variant/60 disabled:opacity-50"
               >
-                <span>開発者用デモログイン (未認証スキップ)</span>
+                <span>デモログイン(認証スキップ)</span>
               </button>
             </div>
 

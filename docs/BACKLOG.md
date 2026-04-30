@@ -6,6 +6,12 @@
 ## 引き継ぎ（2026-04-30 JST — P1/P2対応）
 
 完了:
+- [x] UI/PWA追補: PWAインストールボタンの状態色を修正、manifest orientationをportraitへ変更、ログイン画面コピー/デモログイン文言/プライバシー連絡先/search導線を調整
+- [x] UI/PWA追補: favicon専用のImage Gen画像を生成し、16/32px faviconとして適用
+- [x] UI/PWA追補: コメント取得APIをservice role優先の読み取りにし、RLS/リレーション起因の取得失敗に強くした
+- [x] UI/PWA追補: 既読化までの時間を3秒から5秒へ延長
+- [x] UI/PWA追補: ライブラリ/クリップ詳細/公開詳細のタグをボタン化し、タグ付き一覧へ遷移するようにした
+- [x] UI/PWA追補: ライブラリ一覧に選択削除を追加。クリップ詳細からの削除は既存機能を継続利用
 - [x] P1 CSV一括取り込みの再開補助: URLリストと途中結果を `localStorage` に保持し、ページ再訪時に再実行できるようにした
 - [x] P1 一括取り込みの失敗詳細UI: CSV/Xブックマーク取り込みで失敗・スキップ理由を画面表示
 - [x] P1 `/api/batch-process-ai` 実行時間対策: 5件上限、deadline到達時の `deferred` 返却、クライアント側再投入を追加
@@ -17,6 +23,7 @@
 確認:
 - [x] `npm run build`
 - [x] `npm run check`
+- [!] Googleログインはコード上のOAuth呼び出しは存在するが、実エラー `Unsupported provider: provider is not enabled` はSupabase Auth側のGoogle Provider未有効が原因。Supabase DashboardでGoogle Providerを有効化し、Client ID/Secretとcallback URLを設定する必要がある
 - [!] Android/iOS実機でのPWAインストール確認は、この環境に実機ブラウザがないため未実施
 - [!] 834件Xブックマーク実データ検証は、対象ファイルがワークスペース内に無いため未実施
 
