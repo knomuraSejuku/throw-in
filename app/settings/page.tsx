@@ -6,7 +6,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 import { AppShell } from '@/components/shell/AppShell';
-import { User, CreditCard, HardDrive, Smartphone, LogOut, Trash2, RefreshCw, Globe, Bell, Twitter, CheckCircle, X as XIcon } from 'lucide-react';
+import { User, CreditCard, HardDrive, Smartphone, LogOut, Trash2, RefreshCw, Globe, Bell, Twitter, CheckCircle, X as XIcon, Mail, KeyRound, Link as LinkIcon } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/supabase/client';
 import { useClipStore } from '@/lib/store';
@@ -54,6 +54,14 @@ export default function SettingsPage() {
   const [displayName, setDisplayName] = useState('');
   const [avatarEmoji, setAvatarEmoji] = useState('🙂');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isChangingEmail, setIsChangingEmail] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isLinkingGoogle, setIsLinkingGoogle] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const xImportRef = useRef<HTMLInputElement>(null);
   const [xImportFiles, setXImportFiles] = useState<File[]>([]);
@@ -64,6 +72,7 @@ export default function SettingsPage() {
   const [isXImporting, setIsXImporting] = useState(false);
 
   const EMOJI_OPTIONS = ['🙂','😎','🤖','🦊','🐧','🐸','🦁','🐼','🌸','⚡','🎯','🚀','🎨','📚','🎵','🌍'];
+  const hasGoogleIdentity = user?.identities?.some(identity => identity.provider === 'google') ?? false;
 
   useEffect(() => {
     const savedLang = localStorage.getItem('preferred_language');
@@ -117,6 +126,75 @@ export default function SettingsPage() {
     setIsSavingNotif(true);
     await supabase.from('users').update({ notification_prefs: notifPrefs }).eq('id', user.id);
     setIsSavingNotif(false);
+  };
+
+  const handleChangeEmail = async () => {
+    if (!user || isChangingEmail) return;
+    const email = newEmail.trim();
+    setAuthMessage(null);
+    setAuthError(null);
+    if (!email || email === user.email) {
+      setAuthError('新しいメールアドレスを入力してください。');
+      return;
+    }
+    setIsChangingEmail(true);
+    try {
+      const { error } = await supabase.auth.updateUser(
+        { email },
+        { emailRedirectTo: `${window.location.origin}/auth/callback?next=/settings` }
+      );
+      if (error) throw error;
+      setNewEmail('');
+      setAuthMessage('確認メールを送信しました。メール内のリンクを開くと変更が完了します。');
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'メールアドレスの変更に失敗しました。');
+    } finally {
+      setIsChangingEmail(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    setAuthMessage(null);
+    setAuthError(null);
+    if (newPassword.length < 6) {
+      setAuthError('パスワードは6文字以上で入力してください。');
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setAuthError('確認用パスワードが一致しません。');
+      return;
+    }
+    setIsChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setNewPassword('');
+      setNewPasswordConfirm('');
+      setAuthMessage('パスワードを変更しました。');
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'パスワードの変更に失敗しました。');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleLinkGoogle = async () => {
+    if (hasGoogleIdentity || isLinkingGoogle) return;
+    setAuthMessage(null);
+    setAuthError(null);
+    setIsLinkingGoogle(true);
+    try {
+      const { error } = await supabase.auth.linkIdentity({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=/settings`,
+        },
+      });
+      if (error) throw error;
+    } catch (error) {
+      setIsLinkingGoogle(false);
+      setAuthError(error instanceof Error ? error.message : 'Googleログインの連携に失敗しました。');
+    }
   };
 
   const handleSignOut = async () => {
@@ -353,6 +431,118 @@ export default function SettingsPage() {
                   className="px-5 py-2 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
                   {isSavingProfile ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Login Credentials */}
+          <section className="bg-surface-container-lowest rounded-[32px] p-6 md:p-8 shadow-ambient space-y-6">
+            <div className="flex items-center gap-3 text-secondary">
+              <KeyRound className="w-6 h-6" />
+              <h3 className="font-bold text-lg">ログイン情報</h3>
+            </div>
+
+            {(authMessage || authError) && (
+              <div
+                className={clsx(
+                  'rounded-2xl border px-4 py-3 text-sm',
+                  authError
+                    ? 'border-error/20 bg-error/5 text-error'
+                    : 'border-success/20 bg-success/5 text-success'
+                )}
+              >
+                {authError || authMessage}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+                  <Mail className="h-4 w-4 text-on-surface-variant" />
+                  メールアドレス変更
+                </div>
+                <p className="text-xs text-on-surface-variant">
+                  現在: {user?.email ?? '未設定'}。新しいメールアドレス宛の確認リンクを開くと変更が完了します。
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={e => setNewEmail(e.target.value)}
+                    placeholder="新しいメールアドレス"
+                    className="min-w-0 flex-1 bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-on-surface"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleChangeEmail}
+                    disabled={isChangingEmail}
+                    className="px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    {isChangingEmail ? '送信中...' : '確認メールを送信'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t border-outline-variant/10 pt-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+                  <KeyRound className="h-4 w-4 text-on-surface-variant" />
+                  パスワード変更
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="新しいパスワード"
+                    minLength={6}
+                    className="bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-on-surface"
+                  />
+                  <input
+                    type="password"
+                    value={newPasswordConfirm}
+                    onChange={e => setNewPasswordConfirm(e.target.value)}
+                    placeholder="新しいパスワード（確認）"
+                    minLength={6}
+                    className="bg-surface-container-low border border-outline-variant/30 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-on-surface"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleChangePassword}
+                    disabled={isChangingPassword}
+                    className="px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    {isChangingPassword ? '変更中...' : 'パスワードを変更'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-outline-variant/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-on-surface">
+                    <LinkIcon className="h-4 w-4 text-on-surface-variant" />
+                    Googleログイン
+                  </div>
+                  <p className="text-xs text-on-surface-variant">
+                    {hasGoogleIdentity
+                      ? 'Googleアカウント連携済みです。次回からGoogleでログインできます。'
+                      : 'メールアドレスで登録したアカウントにGoogleログインを追加します。'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLinkGoogle}
+                  disabled={hasGoogleIdentity || isLinkingGoogle}
+                  className={clsx(
+                    'px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors border disabled:cursor-not-allowed',
+                    hasGoogleIdentity
+                      ? 'bg-surface-container text-on-surface-variant border-outline-variant/30 opacity-60'
+                      : 'bg-surface-container-lowest text-on-surface border-outline-variant/50 hover:bg-surface-container-low'
+                  )}
+                >
+                  {hasGoogleIdentity ? '連携済み' : isLinkingGoogle ? 'Googleへ移動中...' : 'Googleを連携'}
                 </button>
               </div>
             </div>

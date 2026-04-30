@@ -6,6 +6,7 @@
 ## 引き継ぎ（2026-04-30 JST — P1/P2対応）
 
 完了:
+- [x] 認証設定: 設定画面にメールアドレス変更、パスワード変更、Googleログイン連携を追加
 - [x] UI/PWA追補: PWAインストールボタンの状態色を修正、manifest orientationをportraitへ変更、ログイン画面コピー/デモログイン文言/プライバシー連絡先/search導線を調整
 - [x] UI/PWA追補: favicon専用のImage Gen画像を生成し、16/32px faviconとして適用
 - [x] UI/PWA追補: コメント取得APIをservice role優先の読み取りにし、RLS/リレーション起因の取得失敗に強くした
