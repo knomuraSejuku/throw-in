@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { createHash } from 'crypto';
+import { getOpenAIOutputText, OPENAI_EMBEDDING_MODEL, OPENAI_METADATA_MODEL } from '@/lib/openai-config';
 
 const CATEGORY_TAXONOMY: Record<string, string[]> = {
   'Technology':  ['AI/ML', 'Web開発', 'セキュリティ', 'ハードウェア', 'モバイル', 'データサイエンス', 'クラウド'],
@@ -17,8 +18,6 @@ const CATEGORY_TAXONOMY: Record<string, string[]> = {
 };
 
 const MAX_AI_TAGS = 20;
-const AI_METADATA_MODEL = 'gpt-5.4-nano';
-const AI_EMBEDDING_MODEL = 'text-embedding-3-small';
 const GENERIC_CLIP_TITLES = new Set([
   'x post',
   'x article',
@@ -283,7 +282,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
       body: JSON.stringify({
-        model: AI_METADATA_MODEL,
+        model: OPENAI_METADATA_MODEL,
         text: { format: { type: 'json_object' } },
         input: [
           { role: 'system', content: systemPrompt },
@@ -303,8 +302,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
 
     if (aiRes.ok) {
       const aiData = await aiRes.json();
-      const outputText = aiData.output?.find((o: { type: string }) => o.type === 'message')
-        ?.content?.find((c: { type: string }) => c.type === 'output_text')?.text ?? '';
+      const outputText = getOpenAIOutputText(aiData);
       try {
         const parsed = JSON.parse(outputText);
         aiGeneratedTitle = normalizeTitle(parsed.generated_title);
@@ -325,7 +323,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
           clipId,
           action: 'clip_version',
           status: 'failed',
-          model: AI_METADATA_MODEL,
+          model: OPENAI_METADATA_MODEL,
           metadata: {
             stage: 'metadata_parse',
             output_sample: outputText.slice(0, 1000),
@@ -342,7 +340,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
         clipId,
         action: 'clip_version',
         status: 'failed',
-        model: AI_METADATA_MODEL,
+        model: OPENAI_METADATA_MODEL,
         metadata: {
           stage: 'openai_metadata',
           error: errorInfo,
@@ -362,7 +360,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
     const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
-      body: JSON.stringify({ model: AI_EMBEDDING_MODEL, input: embedInput }),
+      body: JSON.stringify({ model: OPENAI_EMBEDDING_MODEL, input: embedInput }),
     });
     if (embedRes.ok) {
       const embedData = await embedRes.json();
@@ -426,7 +424,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
         key_points: aiKeyPoints,
         created_by: user.id,
         created_reason: latestVersion ? 'refresh' : 'initial',
-        ai_model: AI_METADATA_MODEL,
+        ai_model: OPENAI_METADATA_MODEL,
         ai_usage_event_id: usageEventId,
       })
       .select('id')
@@ -450,7 +448,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
       clipId,
       action: 'clip_version',
       status: 'failed',
-      model: AI_METADATA_MODEL,
+      model: OPENAI_METADATA_MODEL,
       metadata: {
         stage: 'persist_metadata',
         error: updateError.message,
@@ -474,9 +472,9 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
     clipId,
     action: 'clip_version',
     status: 'succeeded',
-    model: AI_METADATA_MODEL,
+    model: OPENAI_METADATA_MODEL,
     metadata: {
-      embedding_model: embeddingVector ? AI_EMBEDDING_MODEL : null,
+      embedding_model: embeddingVector ? OPENAI_EMBEDDING_MODEL : null,
       title_updated: Boolean(nextTitle),
       tags_count: mergedTags.length,
       summary_present: Boolean(aiSummary),
@@ -516,7 +514,7 @@ export async function PUT(req: NextRequest) {
   const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
-    body: JSON.stringify({ model: 'text-embedding-3-small', input: query }),
+    body: JSON.stringify({ model: OPENAI_EMBEDDING_MODEL, input: query }),
   });
 
   if (!embedRes.ok) {
@@ -547,7 +545,7 @@ export async function PATCH(req: NextRequest) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
     body: JSON.stringify({
-      model: 'gpt-5.4-nano',
+      model: OPENAI_METADATA_MODEL,
       input: [
         { role: 'system', content: `Translate the following text to ${targetLang}. Return only the translated text, no explanation.` },
         { role: 'user', content: text },

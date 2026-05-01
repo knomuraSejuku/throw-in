@@ -8,7 +8,7 @@
 | スタイリング | Tailwind CSS v4 + CSS Variables (Material Design 3 カラーシステム) |
 | 状態管理 | Zustand 5 + IndexedDB (idb-keyval) による永続化 |
 | バックエンド | Supabase (PostgreSQL + Auth + Storage) |
-| AI | OpenAI gpt-4o-mini (要約/タグ/カテゴリ) + text-embedding-3-small (ベクトル検索) |
+| AI | OpenAI gpt-5-nano (要約/タグ/カテゴリ/レポート/インサイト/OCR) + text-embedding-3-small (ベクトル検索) |
 | 言語 | TypeScript 5 (strict mode) |
 
 ## ディレクトリ構成
@@ -89,7 +89,7 @@ supabase/       # SQLマイグレーション
 
 ```
 コンテンツ取得 (extract/youtube/pdf)
-  → OpenAI gpt-4o-mini で JSON 生成 (summary, tags, category, key_points)
+  → OpenAI gpt-5-nano で JSON 生成 (summary, tags, category, key_points)
   → text-embedding-3-small でベクトル生成 (1536次元)
   → Supabase に保存
 ```

@@ -44,7 +44,7 @@ const RELEASES = [
     version: '0.6.0',
     date: '2026-04-15',
     entries: [
-      { type: 'feat', label: '新機能', text: 'AI 要約 + タグ付け自動化（gpt-4o-mini）' },
+      { type: 'feat', label: '新機能', text: 'AI 要約 + タグ付け自動化（gpt-5-nano）' },
       { type: 'feat', label: '新機能', text: 'セマンティック検索（pgvector + text-embedding-3-small）' },
       { type: 'feat', label: '新機能', text: 'PDF / 動画（YouTube）のクリップ保存対応' },
       { type: 'fix', label: '修正', text: 'タグ重複 insert バグを修正' },

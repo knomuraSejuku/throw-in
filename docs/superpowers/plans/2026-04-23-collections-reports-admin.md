@@ -4,9 +4,9 @@
 
 **Goal:** コレクション機能・レポート機能・管理ダッシュボードをモックから実データ連携に昇格させる
 
-**Architecture:** 各機能は独立したフェーズとして順次実装する。コレクション機能は既存の `useCollectionStore`（`lib/store.ts` 実装済み）を `app/collections/page.tsx` に接続し新規作成ダイアログを追加。レポート機能は `useClipStore` のクリップを期間フィルタで絞り込み OpenAI gpt-4o-mini に投げて Markdown レポートを生成・表示する。アドミンダッシュボードは Supabase RPC で集計データを取得してハードコード値を置き換える。
+**Architecture:** 各機能は独立したフェーズとして順次実装する。コレクション機能は既存の `useCollectionStore`（`lib/store.ts` 実装済み）を `app/collections/page.tsx` に接続し新規作成ダイアログを追加。レポート機能は `useClipStore` のクリップを期間フィルタで絞り込み OpenAI gpt-5-nano に投げて Markdown レポートを生成・表示する。アドミンダッシュボードは Supabase RPC で集計データを取得してハードコード値を置き換える。
 
-**Tech Stack:** Next.js 15 App Router, Zustand (`useClipStore` / `useCollectionStore`), Supabase (PostgreSQL + RPC), OpenAI gpt-4o-mini, Tailwind CSS v4, lucide-react, react-markdown
+**Tech Stack:** Next.js 15 App Router, Zustand (`useClipStore` / `useCollectionStore`), Supabase (PostgreSQL + RPC), OpenAI gpt-5-nano, Tailwind CSS v4, lucide-react, react-markdown
 
 ---
 
@@ -337,7 +337,7 @@ const handleGenerate = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-nano',
         messages: [
           {
             role: 'system',

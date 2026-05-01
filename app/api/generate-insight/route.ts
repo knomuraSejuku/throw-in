@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getOpenAIOutputText, OPENAI_METADATA_MODEL } from '@/lib/openai-config';
 
 // POST /api/generate-insight
 // Body: { type: 'column'|'weekly'|'category', category?: string }
@@ -56,12 +57,12 @@ export async function POST(req: NextRequest) {
 
   const prompt = systemPrompts[type] ?? systemPrompts.column;
 
-  const oaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+  const oaiRes = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
+      model: OPENAI_METADATA_MODEL,
+      input: [
         { role: 'system', content: prompt },
         { role: 'user', content: `以下のクリップ一覧（${clips.length}件）をもとにコラムを生成してください:\n\n${clipList}` },
       ],
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
   }
 
   const oaiData = await oaiRes.json();
-  const content: string = oaiData.choices?.[0]?.message?.content ?? '';
+  const content = getOpenAIOutputText(oaiData);
   if (!content) return NextResponse.json({ error: 'Empty response from OpenAI' }, { status: 502 });
 
   // Extract title from first line

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { OPENAI_EMBEDDING_MODEL } from '@/lib/openai-config';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
         const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
-          body: JSON.stringify({ model: 'text-embedding-3-small', input: q }),
+          body: JSON.stringify({ model: OPENAI_EMBEDDING_MODEL, input: q }),
         });
 
         if (embedRes.ok) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { getOpenAIOutputText, OPENAI_METADATA_MODEL } from '@/lib/openai-config';
 
 export const runtime = 'nodejs';
 
@@ -34,20 +35,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'mimeType and base64 image are required' }, { status: 400 });
   }
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${openAiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
+      model: OPENAI_METADATA_MODEL,
+      input: [
         {
           role: 'user',
           content: [
-            { type: 'text', text: 'Extract the text from this document or image. Output only the extracted text.' },
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+            { type: 'input_text', text: 'Extract the text from this document or image. Output only the extracted text.' },
+            { type: 'input_image', image_url: `data:${mimeType};base64,${base64}` },
           ],
         },
       ],
@@ -61,6 +62,6 @@ export async function POST(req: NextRequest) {
   }
 
   const data = await res.json();
-  const text = data.choices?.[0]?.message?.content ?? '';
+  const text = getOpenAIOutputText(data);
   return NextResponse.json({ text });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { getOpenAIOutputText, OPENAI_METADATA_MODEL } from '@/lib/openai-config';
 
 export const runtime = 'nodejs';
 
@@ -47,15 +48,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'clipSummaries required' }, { status: 400 });
   }
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${openAiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
+      model: OPENAI_METADATA_MODEL,
+      input: [
         {
           role: 'system',
           content: `あなたはユーザーの知的活動をサポートするキュレーターアシスタントです。ユーザーが${jpLabel}保存したコンテンツの一覧を受け取り、以下の構成でMarkdown形式のレポートを生成してください。\n\n## レポート構成\n1. **概要サマリー** — ${jpLabel}の保存傾向を2〜3文で\n2. **主要テーマ** — 繰り返し現れるトピックやキーワード\n3. **注目コンテンツ** — 特に重要そうな記事・動画を2〜3件ピックアップして理由とともに紹介\n4. **学びのポイント** — この期間から得られる洞察や次のアクション提案\n\n日本語で記述してください。`,
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
   }
 
   const data = await res.json();
-  const report = data.choices?.[0]?.message?.content ?? '';
+  const report = getOpenAIOutputText(data);
   if (!report) return NextResponse.json({ error: 'Empty response from OpenAI' }, { status: 502 });
 
   return NextResponse.json({ report });
