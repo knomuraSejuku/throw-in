@@ -399,12 +399,12 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
 
     if (versionError) {
       console.error('Failed to persist clip version', versionError);
-      return NextResponse.json({ error: 'Failed to persist clip version', detail: versionError.message }, { status: 500 });
+      dbUpdate.last_refreshed_at = new Date().toISOString();
+    } else {
+      currentVersionId = version.id;
+      dbUpdate.current_version_id = currentVersionId;
+      dbUpdate.last_refreshed_at = new Date().toISOString();
     }
-
-    currentVersionId = version.id;
-    dbUpdate.current_version_id = currentVersionId;
-    dbUpdate.last_refreshed_at = new Date().toISOString();
   }
 
   const { error: updateError } = await metadataClient.from('clips').update(dbUpdate).eq('id', clipId);
@@ -419,7 +419,6 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
     const { error: tagError } = await metadataClient.from('clip_tags').insert(mergedTags.map(t => ({ clip_id: clipId, name: t, user_id: tagOwnerId })));
     if (tagError) {
       console.error('Failed to persist AI tags', tagError);
-      return NextResponse.json({ error: 'Failed to persist AI tags', detail: tagError.message }, { status: 500 });
     }
   }
 

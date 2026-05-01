@@ -15,22 +15,24 @@ import { CelebrationEffect } from '@/components/effects/CelebrationEffect';
 import { aiJustCompleted } from '@/lib/store';
 import { CommentSection } from '@/components/comments/CommentSection';
 
-function formatPlainArticleText(text: string): string {
+function formatPlainArticleText(text: string): string[] {
   const trimmed = text.trim();
-  if (!trimmed) return '';
+  if (!trimmed) return [];
 
   if (/\n/.test(trimmed)) {
     return trimmed
       .split('\n')
       .map(line => line.trim())
-      .filter(Boolean)
-      .join('\n\n');
+      .filter(Boolean);
   }
 
   return trimmed
     .replace(/([。！？!?])\s*/g, '$1\n\n')
     .replace(/\. (?=[A-Z])/g, '.\n\n')
-    .replace(/\n{3,}/g, '\n\n');
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
 }
 
 export default function ClipDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -669,7 +671,13 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
                 >
                   {/<[a-z][\s\S]*>/i.test(clip.body)
                     ? <ReactMarkdown rehypePlugins={[rehypeRaw, rehypeSanitize]}>{clip.body}</ReactMarkdown>
-                    : <div className="article-plain-text">{formatPlainArticleText(clip.body)}</div>
+                    : (
+                      <div className="article-plain-text">
+                        {formatPlainArticleText(clip.body).map((paragraph, index) => (
+                          <p key={`${index}-${paragraph.slice(0, 12)}`}>{paragraph}</p>
+                        ))}
+                      </div>
+                    )
                   }
                 </div>
                 {!isBodyExpanded && (

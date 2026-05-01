@@ -215,6 +215,11 @@ function isXUrl(url: URL): boolean {
   return hostname === 'x.com' || hostname === 'twitter.com';
 }
 
+function isYouTubeUrl(url: URL): boolean {
+  const hostname = url.hostname.replace(/^(www\.|m\.)/, '');
+  return hostname === 'youtube.com' || hostname === 'music.youtube.com' || hostname === 'youtu.be';
+}
+
 function isXArticleUrl(url: URL): boolean {
   return /^\/i\/article\/\d+/.test(url.pathname) || /\/status\/\d+\/article\//.test(url.pathname);
 }
@@ -309,6 +314,21 @@ export async function POST(req: NextRequest) {
 
     if (isXUrl(parsedUrl)) {
       return NextResponse.json(await extractXContent(parsedUrl));
+    }
+
+    if (isYouTubeUrl(parsedUrl)) {
+      const pageResponse = await fetchPublicUrl(parsedUrl, { headers: EXTRACT_HEADERS });
+      if (!pageResponse.ok) {
+        return NextResponse.json({ error: `Failed to fetch URL: ${pageResponse.statusText}` }, { status: pageResponse.status });
+      }
+      const html = await pageResponse.text();
+      return NextResponse.json({
+        title: getMetaContent(html, 'og:title') || getMetaContent(html, 'twitter:title') || getTagText(html, 'title') || null,
+        description: getMetaContent(html, 'og:description') || getMetaContent(html, 'description') || getMetaContent(html, 'twitter:description') || null,
+        thumbnail: getMetaContent(html, 'og:image') || getMetaContent(html, 'twitter:image') || null,
+        body: null,
+        domain: parsedUrl.hostname,
+      });
     }
 
     // Google Workspace URL detection

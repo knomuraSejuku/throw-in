@@ -284,11 +284,18 @@
   }
 
   .prose-body .article-plain-text {
-    white-space: pre-wrap;
     color: var(--color-on-surface);
     font-size: inherit;
     line-height: inherit;
     overflow-wrap: anywhere;
+  }
+
+  .prose-body .article-plain-text p {
+    margin: 0 0 1.5rem;
+  }
+
+  .prose-body .article-plain-text p:last-child {
+    margin-bottom: 0;
   }
 
   /* Headings */
