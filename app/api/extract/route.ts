@@ -235,6 +235,20 @@ async function fetchXOEmbed(url: URL) {
   return await response.json().catch(() => null) as { author_name?: string; html?: string; url?: string } | null;
 }
 
+async function fetchYouTubeOEmbed(url: URL) {
+  const oembedUrl = new URL('https://www.youtube.com/oembed');
+  oembedUrl.searchParams.set('url', url.toString());
+  oembedUrl.searchParams.set('format', 'json');
+
+  const response = await fetchPublicUrl(oembedUrl, { headers: EXTRACT_HEADERS });
+  if (!response.ok) return null;
+  return await response.json().catch(() => null) as {
+    title?: string;
+    author_name?: string;
+    thumbnail_url?: string;
+  } | null;
+}
+
 async function extractXContent(url: URL) {
   const [pageResponse, oembed] = await Promise.allSettled([
     fetchPublicUrl(url, { headers: EXTRACT_HEADERS }),
@@ -317,11 +331,29 @@ export async function POST(req: NextRequest) {
     }
 
     if (isYouTubeUrl(parsedUrl)) {
-      const pageResponse = await fetchPublicUrl(parsedUrl, { headers: EXTRACT_HEADERS });
-      if (!pageResponse.ok) {
-        return NextResponse.json({ error: `Failed to fetch URL: ${pageResponse.statusText}` }, { status: pageResponse.status });
+      const [oembed, pageResponse] = await Promise.allSettled([
+        fetchYouTubeOEmbed(parsedUrl),
+        fetchPublicUrl(parsedUrl, { headers: EXTRACT_HEADERS }),
+      ]);
+
+      const youtubeEmbed = oembed.status === 'fulfilled' ? oembed.value : null;
+      if (youtubeEmbed?.title) {
+        return NextResponse.json({
+          title: youtubeEmbed.title,
+          description: youtubeEmbed.author_name ? `YouTube channel: ${youtubeEmbed.author_name}` : null,
+          thumbnail: youtubeEmbed.thumbnail_url || null,
+          body: null,
+          domain: parsedUrl.hostname,
+        });
       }
-      const html = await pageResponse.text();
+
+      if (pageResponse.status === 'rejected') {
+        throw pageResponse.reason;
+      }
+      if (!pageResponse.value.ok) {
+        return NextResponse.json({ error: `Failed to fetch URL: ${pageResponse.value.statusText}` }, { status: pageResponse.value.status });
+      }
+      const html = await pageResponse.value.text();
       return NextResponse.json({
         title: getMetaContent(html, 'og:title') || getMetaContent(html, 'twitter:title') || getTagText(html, 'title') || null,
         description: getMetaContent(html, 'og:description') || getMetaContent(html, 'description') || getMetaContent(html, 'twitter:description') || null,

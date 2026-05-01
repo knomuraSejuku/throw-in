@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 type TranscriptItem = { text: string };
+type CaptionTrack = {
+  baseUrl?: string;
+  languageCode?: string;
+  kind?: string;
+  name?: { simpleText?: string; runs?: Array<{ text?: string }> };
+};
+
+type TimedTextResponse = {
+  events?: Array<{
+    segs?: Array<{ utf8?: string }>;
+  }>;
+};
+
+const YOUTUBE_CLIENT_VERSION = '20.10.38';
+const YOUTUBE_PLAYER_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
+const YOUTUBE_HEADERS = {
+  'Content-Type': 'application/json',
+  'User-Agent': `com.google.android.youtube/${YOUTUBE_CLIENT_VERSION} (Linux; U; Android 14)`,
+};
 
 function getYouTubeVideoId(rawUrl: string) {
   try {
@@ -18,31 +37,94 @@ function getYouTubeVideoId(rawUrl: string) {
   return rawUrl;
 }
 
-async function fetchYouTubeTranscript(videoId: string) {
-  // youtube-transcript's package root can resolve to an empty module in some runtimes.
-  // Import the published ESM bundle directly so serverless and local resolution match.
-  // @ts-expect-error The package does not publish a declaration for this subpath.
-  const mod = await import('youtube-transcript/dist/youtube-transcript.esm.js');
-  const fetchTranscript = mod.fetchTranscript ?? mod.YoutubeTranscript?.fetchTranscript?.bind(mod.YoutubeTranscript);
-  if (!fetchTranscript) throw new Error('youtube-transcript module did not expose fetchTranscript');
+function pickBestCaptionTrack(tracks: CaptionTrack[]) {
+  return (
+    tracks.find(track => track.languageCode === 'ja' && track.kind === 'asr') ||
+    tracks.find(track => track.languageCode === 'ja') ||
+    tracks.find(track => track.kind === 'asr') ||
+    tracks[0]
+  );
+}
 
-  const attempts = [
-    undefined,
-    { lang: 'ja' },
-    { lang: 'en' },
-  ];
-  let lastError: unknown = null;
-
-  for (const config of attempts) {
-    try {
-      const transcript = await fetchTranscript(videoId, config);
-      if (Array.isArray(transcript) && transcript.length > 0) return transcript as TranscriptItem[];
-    } catch (error) {
-      lastError = error;
-    }
+function parseTimedTextJson(payload: TimedTextResponse): TranscriptItem[] {
+  const lines: string[] = [];
+  for (const event of payload.events ?? []) {
+    const text = event.segs
+      ?.map(segment => segment.utf8 ?? '')
+      .join('')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text) lines.push(text);
   }
 
-  throw lastError instanceof Error ? lastError : new Error('No transcript returned');
+  return lines.map(text => ({ text }));
+}
+
+async function fetchCaptionTracks(videoId: string): Promise<CaptionTrack[]> {
+  const response = await fetch(YOUTUBE_PLAYER_URL, {
+    method: 'POST',
+    headers: YOUTUBE_HEADERS,
+    body: JSON.stringify({
+      context: {
+        client: {
+          clientName: 'ANDROID',
+          clientVersion: YOUTUBE_CLIENT_VERSION,
+          hl: 'ja',
+          gl: 'JP',
+        },
+      },
+      videoId,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`YouTube player API failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const status = data?.playabilityStatus?.status;
+  if (status && status !== 'OK') {
+    throw new Error(data?.playabilityStatus?.reason || 'Video unavailable');
+  }
+
+  return data?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+}
+
+async function fetchTranscriptFromTrack(track: CaptionTrack): Promise<TranscriptItem[]> {
+  if (!track.baseUrl) throw new Error('Caption track did not include a baseUrl');
+  const url = new URL(track.baseUrl);
+  url.searchParams.set('fmt', 'json3');
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      'User-Agent': YOUTUBE_HEADERS['User-Agent'],
+      'Accept': 'application/json,text/plain,*/*',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`YouTube timedtext API failed: ${response.status}`);
+  }
+
+  const data = await response.json().catch(() => null) as TimedTextResponse | null;
+  if (!data) throw new Error('YouTube timedtext API returned invalid JSON');
+
+  return parseTimedTextJson(data);
+}
+
+async function fetchYouTubeTranscript(videoId: string) {
+  const tracks = await fetchCaptionTracks(videoId);
+  if (tracks.length === 0) {
+    throw new Error('No transcript tracks returned');
+  }
+
+  const track = pickBestCaptionTrack(tracks);
+  if (!track) throw new Error('No transcript tracks returned');
+
+  const transcript = await fetchTranscriptFromTrack(track);
+  if (transcript.length > 0) return transcript;
+
+  throw new Error('Transcript track was empty');
 }
 
 export async function POST(req: NextRequest) {
