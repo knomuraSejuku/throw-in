@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { getOpenAIOutputText, OPENAI_METADATA_MODEL } from '@/lib/openai-config';
+import { getOpenAIOutputText, OPENAI_METADATA_MODEL, OPENAI_REASONING } from '@/lib/openai-config';
 
 export const runtime = 'nodejs';
 
@@ -56,10 +56,36 @@ export async function POST(req: NextRequest) {
     },
     body: JSON.stringify({
       model: OPENAI_METADATA_MODEL,
+      reasoning: OPENAI_REASONING.high,
       input: [
         {
           role: 'system',
-          content: `あなたはユーザーの知的活動をサポートするキュレーターアシスタントです。ユーザーが${jpLabel}保存したコンテンツの一覧を受け取り、以下の構成でMarkdown形式のレポートを生成してください。\n\n## レポート構成\n1. **概要サマリー** — ${jpLabel}の保存傾向を2〜3文で\n2. **主要テーマ** — 繰り返し現れるトピックやキーワード\n3. **注目コンテンツ** — 特に重要そうな記事・動画を2〜3件ピックアップして理由とともに紹介\n4. **学びのポイント** — この期間から得られる洞察や次のアクション提案\n\n日本語で記述してください。`,
+          content: `あなたはThrow Inのキュレーション編集者です。ユーザーが${jpLabel}保存したクリップ一覧だけを根拠に、読み返す価値のあるMarkdownレポートを作成してください。
+
+<priority>
+精度を最優先、次に読みやすさと生成速度、最後にコストを考慮します。入力にない事実や外部知識は足さないでください。
+</priority>
+
+<structure>
+## 概要サマリー
+${jpLabel}の保存傾向を2〜3文で説明する。
+
+## 主要テーマ
+繰り返し現れるトピックやキーワードを3〜5件に整理する。
+
+## 注目コンテンツ
+重要そうな記事・動画を2〜3件選び、選定理由を短く書く。
+
+## 学びのポイント
+この期間から得られる洞察や次のアクションを3件以内で提案する。
+</structure>
+
+<style>
+- 日本語で書く
+- 見出しは上記の4つだけを使う
+- 1段落は120字以内を目安にする
+- 過度な断定、装飾目的の絵文字、HTMLは使わない
+</style>`,
         },
         {
           role: 'user',

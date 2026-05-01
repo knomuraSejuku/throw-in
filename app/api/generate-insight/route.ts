@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getOpenAIOutputText, OPENAI_METADATA_MODEL } from '@/lib/openai-config';
+import { getOpenAIOutputText, OPENAI_METADATA_MODEL, OPENAI_REASONING } from '@/lib/openai-config';
 
 // POST /api/generate-insight
 // Body: { type: 'column'|'weekly'|'category', category?: string }
@@ -45,14 +45,16 @@ export async function POST(req: NextRequest) {
     '1行目はMarkdown記号なしのタイトル。',
     '本文はMarkdownで、冒頭に短い導入段落を1つ置く。',
     '本文中に「## 見えてきた流れ」「## 気にしておきたいこと」の2見出しを必ず入れる。',
-    '箇条書きは3項目以内。1段落は120字以内を目安にする。',
+    '各見出しの下に、根拠となるクリップの傾向と解釈を分けて書く。',
+    '箇条書きは各見出し3項目以内。1段落は120字以内を目安にする。',
+    '入力クリップにない固有情報や外部ニュースは追加しない。',
     'HTMLは使わない。装飾目的の絵文字は使わない。',
   ].join('\n');
 
   const systemPrompts: Record<string, string> = {
-    column: `あなたは知的好奇心を刺激するメディアのコラムニストです。提供されたクリップ（記事・動画・メモ）の一覧をもとに、読者にとって示唆に富む日本語コラムを書いてください。600〜900字程度。\n\n${formatRule}`,
-    weekly: `あなたはキュレーターです。今週注目のグローバルクリップをもとに「今週の注目トピック」という形式の週次ダイジェストを書いてください。600〜900字程度。\n\n${formatRule}`,
-    category: `あなたはカテゴリ「${category ?? ''}」の専門キュレーターです。提供されたクリップをもとに、このカテゴリの最新動向をまとめた日本語コラムを書いてください。600〜900字程度。\n\n${formatRule}`,
+    column: `あなたはThrow Inの編集者です。提供された公開クリップの一覧だけを根拠に、読者にとって示唆に富む日本語コラムを書いてください。600〜900字程度。\n\n<priority>精度を最優先、次に読みやすさと生成速度、最後にコストを考慮します。</priority>\n\n${formatRule}`,
+    weekly: `あなたはThrow Inのキュレーターです。今週注目の公開クリップ一覧だけを根拠に、「今週の注目トピック」という形式の日本語ダイジェストを書いてください。600〜900字程度。\n\n<priority>精度を最優先、次に読みやすさと生成速度、最後にコストを考慮します。</priority>\n\n${formatRule}`,
+    category: `あなたはカテゴリ「${category ?? ''}」の専門編集者です。提供された公開クリップ一覧だけを根拠に、このカテゴリの動向をまとめた日本語コラムを書いてください。600〜900字程度。\n\n<priority>精度を最優先、次に読みやすさと生成速度、最後にコストを考慮します。</priority>\n\n${formatRule}`,
   };
 
   const prompt = systemPrompts[type] ?? systemPrompts.column;
@@ -62,6 +64,7 @@ export async function POST(req: NextRequest) {
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
     body: JSON.stringify({
       model: OPENAI_METADATA_MODEL,
+      reasoning: OPENAI_REASONING.high,
       input: [
         { role: 'system', content: prompt },
         { role: 'user', content: `以下のクリップ一覧（${clips.length}件）をもとにコラムを生成してください:\n\n${clipList}` },

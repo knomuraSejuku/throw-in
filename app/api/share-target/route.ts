@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { normalizeClipUrl } from '@/lib/url-normalize';
-import { getOpenAIOutputText, OPENAI_METADATA_MODEL } from '@/lib/openai-config';
+import { getOpenAIOutputText, OPENAI_METADATA_MODEL, OPENAI_REASONING } from '@/lib/openai-config';
 
 export const runtime = 'nodejs';
 
@@ -46,11 +46,12 @@ async function extractImageText(file: File): Promise<string | null> {
     },
     body: JSON.stringify({
       model: OPENAI_METADATA_MODEL,
+      reasoning: OPENAI_REASONING.medium,
       input: [
         {
           role: 'user',
           content: [
-            { type: 'input_text', text: 'Extract the text from this document or image. Output only the extracted text.' },
+            { type: 'input_text', text: 'Extract all readable text from this shared image. Preserve natural reading order, headings/lists when visible, names, numbers, URLs, and Japanese text exactly. If no meaningful text is visible, return an empty string. Output only the extracted text.' },
             { type: 'input_image', image_url: `data:${file.type};base64,${base64}` },
           ],
         },

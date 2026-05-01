@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { getOpenAIOutputText, OPENAI_METADATA_MODEL } from '@/lib/openai-config';
+import { getOpenAIOutputText, OPENAI_METADATA_MODEL, OPENAI_REASONING } from '@/lib/openai-config';
 
 export const runtime = 'nodejs';
 
@@ -43,11 +43,12 @@ export async function POST(req: NextRequest) {
     },
     body: JSON.stringify({
       model: OPENAI_METADATA_MODEL,
+      reasoning: OPENAI_REASONING.medium,
       input: [
         {
           role: 'user',
           content: [
-            { type: 'input_text', text: 'Extract the text from this document or image. Output only the extracted text.' },
+            { type: 'input_text', text: 'Extract all readable text from this document or image. Preserve natural reading order, line breaks for headings/lists/tables when useful, names, numbers, URLs, and Japanese text exactly. If no meaningful text is visible, return an empty string. Output only the extracted text.' },
             { type: 'input_image', image_url: `data:${mimeType};base64,${base64}` },
           ],
         },

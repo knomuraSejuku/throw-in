@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { createHash } from 'crypto';
-import { getOpenAIOutputText, OPENAI_EMBEDDING_MODEL, OPENAI_METADATA_MODEL } from '@/lib/openai-config';
+import { getOpenAIOutputText, OPENAI_EMBEDDING_MODEL, OPENAI_METADATA_MODEL, OPENAI_REASONING } from '@/lib/openai-config';
 
 const CATEGORY_TAXONOMY: Record<string, string[]> = {
   'Technology':  ['AI/ML', 'Web開発', 'セキュリティ', 'ハードウェア', 'モバイル', 'データサイエンス', 'クラウド'],
@@ -243,30 +243,57 @@ export async function POST(req: NextRequest) {
     }, { status: 429 });
   }
 
-  const systemPrompt = `あなたはプロの編集者です。ユーザーが保存するコンテンツのメタデータを抽出します。提供されたテキストを読み、以下のJSONフォーマットで要約・タグ・カテゴリを返してください。
+  const systemPrompt = `あなたはThrow Inの編集責任者です。ユーザーが保存した原典を、あとで探しやすく・読み返しやすいクリップ情報へ整理してください。
 
-カテゴリは以下の固定リストから必ず1つ選んでください:
+<priority>
+精度を最優先にし、次に処理速度、最後にコストを考慮します。原典にない事実は補完しないでください。
+</priority>
+
+<task>
+原典テキストから、generated_title / summary / tags / category / subcategory / key_points を抽出・生成します。
+</task>
+
+<taxonomy>
+categoryは以下の固定リストから必ず1つ選び、subcategoryは選んだcategory配下から最も近いものを1つ選んでください。
 ${JSON.stringify(CATEGORY_TAXONOMY)}
+</taxonomy>
 
-【既存タグ（できる限りここから再利用すること）】
+<existing_tags>
 ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
+</existing_tags>
 
-タグ付けルール:
+<tag_rules>
 - tagsは最大20件。必ず原典本文・タイトル・要約への関連度が高い順に並べる
 - 上位20件に入らない周辺語・一般語・重複語・広すぎるタグは出力しない
 - 原典の主要概念、固有名詞、技術名、人物名、プロダクト名、テーマに強く関係するタグだけを選ぶ
 - 既存タグに合致するものがあれば完全一致で再利用する
 - 新しい概念には新規タグを追加してよい
 - タグは短く具体的に（1〜4語程度）
+</tag_rules>
 
-タイトル生成ルール:
+<title_rules>
 - generated_titleには、一覧で一目で内容が分かる短いタイトルを必ず返す
 - URL、ドメイン名、ファイル名、"X Post"、"X Article"、"Twitter Post"、"無題の記事" のような汎用名をそのまま使わない
 - 20〜45文字程度を目安に、主題・固有名詞・資料種別が分かる自然なタイトルにする
 - クリックを煽る表現や説明文ではなく、保存物の名前として使える表現にする
+</title_rules>
 
-出力フォーマット:
-{"generated_title": "内容が一目で分かる短いタイトル", "summary": "3〜4文程度の要約（コンテンツの言語に合わせる）", "tags": ["タグ1", "タグ2", ...], "category": "カテゴリ名", "subcategory": "サブカテゴリ名", "key_points": "## ポイント1\\n\\n- 説明（Markdown形式。h2/h3と箇条書きで階層を表現。コンテンツの言語に合わせる）"}`;
+<summary_rules>
+- summaryは3〜4文。結論、扱っている対象、重要な論点が分かるようにする
+- 原典の言語を優先する。日本語原典なら日本語、英語原典なら自然な日本語要約にしてよい
+- 広告、ナビゲーション、著作権表記、フッターなど本文でない要素は無視する
+</summary_rules>
+
+<key_points_rules>
+- key_pointsはMarkdown文字列で返す
+- "## "見出しを2〜4個置き、各見出しの下に箇条書きを2〜4個置く
+- 重要度順に並べる。本文が薄い場合は無理に膨らませず、確認できる範囲だけを書く
+</key_points_rules>
+
+<output_contract>
+JSON以外の説明、Markdownフェンス、前置き、後書きは出力しないでください。必ず次のキーだけを返してください。
+{"generated_title": "内容が一目で分かる短いタイトル", "summary": "3〜4文程度の要約（コンテンツの言語に合わせる）", "tags": ["タグ1", "タグ2", ...], "category": "カテゴリ名", "subcategory": "サブカテゴリ名", "key_points": "## ポイント1\\n\\n- 説明（Markdown形式。h2/h3と箇条書きで階層を表現。コンテンツの言語に合わせる）"}
+</output_contract>`;
 
   // AI summary/tags/category
   let aiSummary: string | null = null;
@@ -283,6 +310,7 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
       body: JSON.stringify({
         model: OPENAI_METADATA_MODEL,
+        reasoning: OPENAI_REASONING.high,
         text: { format: { type: 'json_object' } },
         input: [
           { role: 'system', content: systemPrompt },
@@ -546,8 +574,9 @@ export async function PATCH(req: NextRequest) {
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAiKey}` },
     body: JSON.stringify({
       model: OPENAI_METADATA_MODEL,
+      reasoning: OPENAI_REASONING.medium,
       input: [
-        { role: 'system', content: `Translate the following text to ${targetLang}. Return only the translated text, no explanation.` },
+        { role: 'system', content: `Translate the source text to ${targetLang}. Preserve meaning, names, URLs, numbers, and Markdown structure. Return only the translated text with no explanation.` },
         { role: 'user', content: text },
       ],
     }),
@@ -558,8 +587,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Translation failed' }, { status: 502 });
   }
   const data = await res.json();
-  const translated = data.output?.find((o: { type: string }) => o.type === 'message')
-    ?.content?.find((c: { type: string }) => c.type === 'output_text')?.text ?? null;
+  const translated = getOpenAIOutputText(data) || null;
 
   return NextResponse.json({ translated });
 }
