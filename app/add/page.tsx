@@ -304,8 +304,9 @@ function AddClipForm() {
 
         await useClipStore.getState().fetchClips();
         setIsSaved(true);
-        enqueueAiProcessing(data.clipId);
-        setTimeout(() => router.push(`/?process=${encodeURIComponent(data.clipId)}`), 1500);
+        const shouldProcess = String(data?.body ?? '').trim().length > 10;
+        if (shouldProcess) enqueueAiProcessing(data.clipId);
+        setTimeout(() => router.push(shouldProcess ? `/?process=${encodeURIComponent(data.clipId)}` : '/'), 1500);
         return;
       }
 

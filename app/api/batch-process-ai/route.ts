@@ -46,7 +46,12 @@ async function readApiError(response: Response) {
 }
 
 function isYouTubeUrl(url: string) {
-  return url.includes('youtube.com') || url.includes('youtu.be');
+  try {
+    const host = new URL(url).hostname.replace(/^(www\.|m\.)/, '');
+    return host === 'youtube.com' || host === 'music.youtube.com' || host === 'youtu.be';
+  } catch {
+    return url.includes('youtube.com') || url.includes('youtu.be');
+  }
 }
 
 function buildJsonHeaders(cookieHeader: string | null): HeadersInit {
@@ -56,6 +61,34 @@ function buildJsonHeaders(cookieHeader: string | null): HeadersInit {
 }
 
 async function fetchExtraction(origin: string, url: string, contentType: string | null | undefined, cookieHeader: string | null) {
+  if (contentType === 'video' && isYouTubeUrl(url)) {
+    const transcriptRes = await fetch(`${origin}/api/youtube`, {
+      method: 'POST',
+      headers: buildJsonHeaders(cookieHeader),
+      body: JSON.stringify({ url }),
+    });
+
+    if (!transcriptRes.ok) {
+      throw new Error(await readApiError(transcriptRes));
+    }
+
+    const transcriptData = await transcriptRes.json();
+    const metadataRes = await fetch(`${origin}/api/extract`, {
+      method: 'POST',
+      headers: buildJsonHeaders(cookieHeader),
+      body: JSON.stringify({ url }),
+    });
+    const metadata = metadataRes.ok ? await metadataRes.json().catch(() => null) : null;
+
+    return {
+      ...transcriptData,
+      title: metadata?.title || transcriptData?.title || null,
+      thumbnail: metadata?.thumbnail || transcriptData?.thumbnail || null,
+      domain: metadata?.domain || transcriptData?.domain || 'youtube.com',
+      body: transcriptData?.body || null,
+    };
+  }
+
   const endpoints = contentType === 'video' && isYouTubeUrl(url)
     ? ['/api/youtube', '/api/extract']
     : ['/api/extract'];

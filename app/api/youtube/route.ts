@@ -1,16 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { YoutubeTranscript } from 'youtube-transcript';
+
+type TranscriptItem = { text: string };
 
 function getYouTubeVideoId(rawUrl: string) {
   try {
     const parsed = new URL(rawUrl);
     const host = parsed.hostname.replace(/^(www\.|m\.)/, '');
-    if (host === 'youtu.be') return parsed.pathname.split('/').filter(Boolean)[0] ?? rawUrl;
-    if (host === 'youtube.com' || host === 'music.youtube.com') return parsed.searchParams.get('v') || rawUrl;
+    const pathParts = parsed.pathname.split('/').filter(Boolean);
+    if (host === 'youtu.be') return pathParts[0] ?? rawUrl;
+    if (host === 'youtube.com' || host === 'music.youtube.com') {
+      if (parsed.searchParams.get('v')) return parsed.searchParams.get('v')!;
+      if (['shorts', 'live', 'embed', 'v'].includes(pathParts[0])) return pathParts[1] ?? rawUrl;
+    }
   } catch {
     // The library also accepts bare video IDs.
   }
   return rawUrl;
+}
+
+async function fetchYouTubeTranscript(videoId: string) {
+  // youtube-transcript's package root can resolve to an empty module in some runtimes.
+  // Import the published ESM bundle directly so serverless and local resolution match.
+  // @ts-expect-error The package does not publish a declaration for this subpath.
+  const mod = await import('youtube-transcript/dist/youtube-transcript.esm.js');
+  const fetchTranscript = mod.fetchTranscript ?? mod.YoutubeTranscript?.fetchTranscript?.bind(mod.YoutubeTranscript);
+  if (!fetchTranscript) throw new Error('youtube-transcript module did not expose fetchTranscript');
+
+  const attempts = [
+    undefined,
+    { lang: 'ja' },
+    { lang: 'en' },
+  ];
+  let lastError: unknown = null;
+
+  for (const config of attempts) {
+    try {
+      const transcript = await fetchTranscript(videoId, config);
+      if (Array.isArray(transcript) && transcript.length > 0) return transcript as TranscriptItem[];
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('No transcript returned');
 }
 
 export async function POST(req: NextRequest) {
@@ -23,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const videoId = getYouTubeVideoId(url);
-      const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+      const transcript = await fetchYouTubeTranscript(videoId);
       const fullText = transcript.map(t => t.text).join(' ');
       if (!fullText.trim()) {
         return NextResponse.json({ error: '字幕は取得できましたが、本文が空でした。' }, { status: 400 });

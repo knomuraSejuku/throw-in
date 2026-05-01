@@ -7,7 +7,12 @@ import { normalizeClipUrl } from '@/lib/url-normalize';
 export const runtime = 'nodejs';
 
 function isYouTubeUrl(url: string): boolean {
-  return url.includes('youtube.com') || url.includes('youtu.be');
+  try {
+    const host = new URL(url).hostname.replace(/^(www\.|m\.)/, '');
+    return host === 'youtube.com' || host === 'music.youtube.com' || host === 'youtu.be';
+  } catch {
+    return url.includes('youtube.com') || url.includes('youtu.be');
+  }
 }
 
 function deriveReadableTitle(rawTitle: string | undefined | null, extractedBody: string | undefined | null, fallback: string) {
@@ -90,7 +95,7 @@ async function extractUrl(origin: string, normalizedUrl: string, cookieHeader: s
         title: ogData.title || extractedData?.title,
         thumbnail: ogData.thumbnail || extractedData?.thumbnail,
         domain: ogData.domain || extractedData?.domain,
-        body: extractedData?.body || ogData.body,
+        body: extractedData?.body || null,
       };
     } catch {
       // Keep transcript-only data when available.
