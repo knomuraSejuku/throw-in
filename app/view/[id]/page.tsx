@@ -11,6 +11,7 @@ import ReactMarkdown from 'react-markdown';
 import { useAuthStore } from '@/lib/auth-store';
 import { CATEGORY_TAXONOMY } from '@/lib/store';
 import { CommentSection } from '@/components/comments/CommentSection';
+import { getPreferredLanguage } from '@/lib/language';
 
 const TYPE_LABELS: Record<string, string> = {
   url: '記事', video: '動画', image: '画像', pdf: 'ドキュメント', diary: '日記・メモ',
@@ -19,16 +20,22 @@ const TYPE_LABELS: Record<string, string> = {
 interface PublicClip {
   id: string;
   title: string;
+  titleEn?: string | null;
   summary?: string | null;
+  summaryEn?: string | null;
   keyPoints?: string | null;
+  keyPointsEn?: string | null;
   url?: string | null;
   domain?: string | null;
   thumbnail?: string | null;
   type: string;
   category?: string | null;
+  categoryEn?: string | null;
   subcategory?: string | null;
+  subcategoryEn?: string | null;
   date: string;
   tags?: string[];
+  tagsEn?: string[];
   userId: string;
   displayName?: string | null;
   avatarEmoji?: string | null;
@@ -56,10 +63,20 @@ export default function PublicClipViewPage({ params }: { params: Promise<{ id: s
     fetch(`/api/public-clip/${id}`)
       .then(r => (r.ok ? r.json() : Promise.reject()))
       .then(data => {
-        setClip(data.clip);
-        setEditCategory(data.clip.category ?? '');
-        setEditSubcategory(data.clip.subcategory ?? '');
-        setEditTags(data.clip.tags ?? []);
+        const lang = getPreferredLanguage();
+        const nextClip = {
+          ...data.clip,
+          title: lang === 'en' ? (data.clip.titleEn || data.clip.title) : data.clip.title,
+          summary: lang === 'en' ? (data.clip.summaryEn || data.clip.summary) : data.clip.summary,
+          keyPoints: lang === 'en' ? (data.clip.keyPointsEn || data.clip.keyPoints) : data.clip.keyPoints,
+          category: lang === 'en' ? (data.clip.categoryEn || data.clip.category) : data.clip.category,
+          subcategory: lang === 'en' ? (data.clip.subcategoryEn || data.clip.subcategory) : data.clip.subcategory,
+          tags: lang === 'en' && Array.isArray(data.clip.tagsEn) && data.clip.tagsEn.length > 0 ? data.clip.tagsEn : data.clip.tags,
+        };
+        setClip(nextClip);
+        setEditCategory(nextClip.category ?? '');
+        setEditSubcategory(nextClip.subcategory ?? '');
+        setEditTags(nextClip.tags ?? []);
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));

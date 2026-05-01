@@ -406,9 +406,15 @@ function AddClipForm() {
         preview_image_url: extractedData?.thumbnail || inheritedClip?.thumbnail || null,
         extracted_content: extractedData?.body || null,
         summary: inheritedClip?.summary || null,
+        summary_en: inheritedClip?.summaryEn || null,
+        title_en: inheritedClip?.titleEn || null,
         category: inheritedClip?.category || null,
+        category_en: inheritedClip?.categoryEn || null,
         subcategory: inheritedClip?.subcategory || null,
+        subcategory_en: inheritedClip?.subcategoryEn || null,
         key_points: inheritedClip?.keyPoints || null,
+        key_points_en: inheritedClip?.keyPointsEn || null,
+        tags_en: inheritedClip?.tagsEn || [],
         is_global_search: isGlobalSearch,
       }).select().single();
 

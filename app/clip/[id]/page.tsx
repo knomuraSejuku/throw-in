@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/client';
 import { CelebrationEffect } from '@/components/effects/CelebrationEffect';
 import { aiJustCompleted } from '@/lib/store';
 import { CommentSection } from '@/components/comments/CommentSection';
+import { getPreferredLanguageLabel } from '@/lib/language';
 
 function formatPlainArticleText(text: string): string[] {
   const trimmed = text.trim();
@@ -201,7 +202,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
   const handleTranslate = async () => {
     setIsTranslating(true);
     setTranslatedText(null);
-    const lang = (typeof window !== 'undefined' && localStorage.getItem('preferred_language')) || '日本語';
+    const lang = getPreferredLanguageLabel();
     const result = await translateClip(clip!.id, lang);
     setTranslatedText(result);
     setIsTranslating(false);
@@ -644,7 +645,7 @@ export default function ClipDetailPage({ params }: { params: Promise<{ id: strin
                 {isTranslating ? '翻訳中...' : '翻訳'}
               </button>
               <span className="text-xs text-on-surface-variant">
-                → {(typeof window !== 'undefined' && localStorage.getItem('preferred_language')) || '日本語'}
+                → {getPreferredLanguageLabel()}
                 <a href="/settings" className="ml-2 text-primary hover:underline">変更</a>
               </span>
             </div>

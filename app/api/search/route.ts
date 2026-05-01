@@ -98,8 +98,8 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from('clips')
     .select(`
-      id, title, summary, url, source_domain, preview_image_url,
-      content_type, category, subcategory, created_at, user_id,
+      id, title, title_en, summary, summary_en, url, source_domain, preview_image_url,
+      content_type, category, category_en, subcategory, subcategory_en, tags_en, created_at, user_id,
       clip_tags${tag ? '!inner' : ''} (name),
       users (display_name, avatar_emoji)
     `)
@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (q && !semanticIds) {
-    query = query.or(`title.ilike.%${q}%,summary.ilike.%${q}%`);
+    query = query.or(`title.ilike.%${q}%,summary.ilike.%${q}%,title_en.ilike.%${q}%,summary_en.ilike.%${q}%`);
   }
 
   const { data, error } = await query;
@@ -143,16 +143,21 @@ export async function GET(req: NextRequest) {
     return {
       id: d.id,
       title: d.title,
+      titleEn: d.title_en ?? null,
       summary: d.summary,
+      summaryEn: d.summary_en ?? null,
       url: d.url,
       domain: d.source_domain,
       thumbnail: d.preview_image_url,
       type: TYPE_MAP[d.content_type] ?? 'url',
       category: d.category,
+      categoryEn: d.category_en,
       subcategory: d.subcategory,
+      subcategoryEn: d.subcategory_en,
       date: new Date(d.created_at).toLocaleDateString('ja-JP'),
       createdAt: d.created_at,
       tags: d.clip_tags?.map((t: any) => t.name) ?? [],
+      tagsEn: Array.isArray(d.tags_en) ? d.tags_en : [],
       userId: d.user_id,
       displayName: profile?.display_name ?? null,
       avatarEmoji: profile?.avatar_emoji ?? '🙂',

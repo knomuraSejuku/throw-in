@@ -97,7 +97,12 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const savedLang = localStorage.getItem('preferred_language');
-    if (savedLang) setPreferredLang(savedLang);
+    if (savedLang === 'English' || savedLang === '日本語') {
+      setPreferredLang(savedLang);
+    } else if (savedLang) {
+      setPreferredLang('日本語');
+      localStorage.setItem('preferred_language', '日本語');
+    }
 
     const standalone = window.matchMedia('(display-mode: standalone)').matches
       || (navigator as Navigator & { standalone?: boolean }).standalone === true;
@@ -696,13 +701,13 @@ export default function SettingsPage() {
           <section className="bg-surface-container-lowest rounded-[32px] p-6 md:p-8 shadow-ambient space-y-4">
             <div className="flex items-center gap-3 text-secondary mb-2">
               <Globe className="w-6 h-6" />
-              <h3 className="font-bold text-lg">翻訳言語設定</h3>
+              <h3 className="font-bold text-lg">言語設定</h3>
             </div>
             <p className="text-sm text-on-surface-variant leading-relaxed">
-              翻訳機能で使用するデフォルト言語を設定します。
+              AI整理情報と翻訳機能で使用する表示言語を設定します。
             </p>
             <div className="pt-2">
-              <label className="block text-sm font-medium text-on-surface mb-2">翻訳先言語</label>
+              <label className="block text-sm font-medium text-on-surface mb-2">表示言語</label>
               <select
                 value={preferredLang}
                 onChange={e => {
@@ -713,11 +718,6 @@ export default function SettingsPage() {
               >
                 <option value="日本語">日本語</option>
                 <option value="English">English</option>
-                <option value="中文">中文</option>
-                <option value="한국어">한국어</option>
-                <option value="Español">Español</option>
-                <option value="Français">Français</option>
-                <option value="Deutsch">Deutsch</option>
               </select>
             </div>
           </section>

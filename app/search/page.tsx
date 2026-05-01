@@ -8,6 +8,7 @@ import Link from 'next/link';
 import clsx from 'clsx';
 import { useClipStore } from '@/lib/store';
 import { useAuthStore } from '@/lib/auth-store';
+import { getPreferredLanguage } from '@/lib/language';
 
 const TYPE_FILTERS = [
   { key: 'all',      label: 'すべて' },
@@ -35,7 +36,9 @@ const TYPE_LABELS: Record<string, string> = {
 interface DisplayClip {
   id: string;
   title: string;
+  titleEn?: string | null;
   summary?: string | null;
+  summaryEn?: string | null;
   url?: string | null;
   domain?: string | null;
   thumbnail?: string | null;
@@ -44,6 +47,7 @@ interface DisplayClip {
   date: string;
   createdAt?: string;
   tags?: string[];
+  tagsEn?: string[];
   fileName?: string | null;
   fileSize?: string | null;
   userId?: string | null;
@@ -86,8 +90,12 @@ export default function SearchPage() {
     fetch(`/api/search?${params}`)
       .then(r => r.json())
       .then(data => {
+        const lang = getPreferredLanguage();
         const clips: DisplayClip[] = (data.clips ?? []).map((c: any) => ({
           ...c,
+          title: lang === 'en' ? (c.titleEn || c.title) : c.title,
+          summary: lang === 'en' ? (c.summaryEn || c.summary) : c.summary,
+          tags: lang === 'en' && Array.isArray(c.tagsEn) && c.tagsEn.length > 0 ? c.tagsEn : c.tags,
           typeLabel: TYPE_LABELS[c.type] ?? c.type,
         }));
         setGlobalClips(clips);

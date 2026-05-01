@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { get, set, del } from 'idb-keyval';
 import { createClient } from '@/lib/supabase/client';
+import { getPreferredLanguage } from '@/lib/language';
 
 // AI完了通知用: persistしない一時セット
 export const aiJustCompleted = new Set<string>();
@@ -25,7 +26,9 @@ export interface Clip {
   type: ClipType;
   typeLabel: string;
   title: string;
+  titleEn?: string | null;
   summary?: string | null;
+  summaryEn?: string | null;
   body?: string | null;
   url?: string | null;
   domain?: string | null;
@@ -40,11 +43,15 @@ export interface Clip {
   fileName?: string | null;
   fileSize?: string | null;
   tags?: string[];
+  tagsEn?: string[];
   collections?: string[];
   userNote?: string | null;
   category?: string | null;
+  categoryEn?: string | null;
   subcategory?: string | null;
+  subcategoryEn?: string | null;
   keyPoints?: string | null;
+  keyPointsEn?: string | null;
   saveCount?: number;
   ownerId?: string | null;
   isOwner?: boolean;
@@ -105,7 +112,9 @@ const LIST_CLIP_SELECT = `
   id,
   user_id,
   title,
+  title_en,
   summary,
+  summary_en,
   url,
   source_domain,
   created_at,
@@ -117,7 +126,10 @@ const LIST_CLIP_SELECT = `
   content_type,
   my_note,
   category,
+  category_en,
   subcategory,
+  subcategory_en,
+  tags_en,
   saved_from_clip_id,
   clip_tags(name),
   clip_collections(collection_id)
@@ -126,7 +138,8 @@ const LIST_CLIP_SELECT = `
 const DETAIL_CLIP_SELECT = `
   ${LIST_CLIP_SELECT},
   extracted_content,
-  key_points
+  key_points,
+  key_points_en
 `;
 
 const SAVED_CLIP_SELECT = `
@@ -156,12 +169,17 @@ const SAVED_CLIP_DETAIL_SELECT = `
 const mapClipRow = (d: any, saveCount = 0, save?: any): Clip => {
   const type = typeMapping[d.content_type] || 'url';
   const savedAt = save?.created_at ?? d.created_at;
+  const lang = getPreferredLanguage();
+  const tagsJa = d.clip_tags?.map((t: any) => t.name) || [];
+  const tagsEn = Array.isArray(d.tags_en) ? d.tags_en.map((t: any) => String(t)).filter(Boolean) : [];
   return {
     id: d.id,
     type: type,
     typeLabel: labelMapping[type],
-    title: d.title,
-    summary: d.summary,
+    title: lang === 'en' ? (d.title_en || d.title) : d.title,
+    titleEn: d.title_en ?? null,
+    summary: lang === 'en' ? (d.summary_en || d.summary) : d.summary,
+    summaryEn: d.summary_en ?? null,
     body: d.extracted_content,
     url: d.url,
     domain: d.source_domain,
@@ -173,12 +191,16 @@ const mapClipRow = (d: any, saveCount = 0, save?: any): Clip => {
     isBookmarked: save ? (save.is_bookmarked ?? false) : d.is_bookmarked,
     isGlobalSearch: d.is_global_search ?? false,
     thumbnail: d.preview_image_url,
-    tags: d.clip_tags?.map((t: any) => t.name) || [],
+    tags: lang === 'en' && tagsEn.length > 0 ? tagsEn : tagsJa,
+    tagsEn,
     collections: d.clip_collections?.map((c: any) => c.collection_id) || [],
     userNote: save ? save.my_note : d.my_note,
-    category: d.category ?? null,
-    subcategory: d.subcategory ?? null,
-    keyPoints: d.key_points ?? null,
+    category: lang === 'en' ? (d.category_en || d.category) : d.category ?? null,
+    categoryEn: d.category_en ?? null,
+    subcategory: lang === 'en' ? (d.subcategory_en || d.subcategory) : d.subcategory ?? null,
+    subcategoryEn: d.subcategory_en ?? null,
+    keyPoints: lang === 'en' ? (d.key_points_en || d.key_points) : d.key_points ?? null,
+    keyPointsEn: d.key_points_en ?? null,
     saveCount,
     ownerId: d.user_id ?? null,
     isOwner: save?.user_id ? d.user_id === save.user_id : undefined,
@@ -270,12 +292,12 @@ export const useClipStore = create<ClipStore>()(
         throw new Error(`AI processing failed: ${res.status} ${detail.slice(0, 300)}`);
       }
 
-      const { title, summary, tags, category, subcategory, keyPoints } = await res.json();
+      const { title, titleEn, summary, summaryEn, tags, tagsEn, category, categoryEn, subcategory, subcategoryEn, keyPoints, keyPointsEn } = await res.json();
 
       getStore().updateProcessingJob(clipId, 'done');
       aiJustCompleted.add(clipId);
 
-      await getStore().updateClip(clipId, { title: title || undefined, summary, tags, category, subcategory, keyPoints });
+      await getStore().updateClip(clipId, { title: title || undefined, titleEn, summary, summaryEn, tags, tagsEn, category, categoryEn, subcategory, subcategoryEn, keyPoints, keyPointsEn });
     } catch (err) {
       console.error('Job error', err);
       getStore().updateProcessingJob(clipId, 'failed');
@@ -498,9 +520,16 @@ export const useClipStore = create<ClipStore>()(
     // Map Partial<Clip> to Supabase columns
     const dbUpdates: any = {};
     if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.titleEn !== undefined) dbUpdates.title_en = updates.titleEn;
+    if (updates.summary !== undefined) dbUpdates.summary = updates.summary;
+    if (updates.summaryEn !== undefined) dbUpdates.summary_en = updates.summaryEn;
     if (updates.category !== undefined) dbUpdates.category = updates.category;
+    if (updates.categoryEn !== undefined) dbUpdates.category_en = updates.categoryEn;
     if (updates.subcategory !== undefined) dbUpdates.subcategory = updates.subcategory;
+    if (updates.subcategoryEn !== undefined) dbUpdates.subcategory_en = updates.subcategoryEn;
     if (updates.keyPoints !== undefined) dbUpdates.key_points = updates.keyPoints;
+    if (updates.keyPointsEn !== undefined) dbUpdates.key_points_en = updates.keyPointsEn;
+    if (updates.tagsEn !== undefined) dbUpdates.tags_en = updates.tagsEn;
     if (updates.isGlobalSearch !== undefined) dbUpdates.is_global_search = updates.isGlobalSearch;
     const saveUpdates: any = {};
     if (updates.userNote !== undefined) saveUpdates.my_note = updates.userNote;
