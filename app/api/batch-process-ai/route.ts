@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 export const runtime = 'nodejs';
@@ -29,6 +30,40 @@ async function getAuthedSupabase() {
   );
   const { data: { user } } = await supabase.auth.getUser();
   return { supabase, user };
+}
+
+function getMetadataClient() {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) return null;
+
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceKey,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
+async function recordBatchAiEvent(params: {
+  userId: string;
+  clipId: string;
+  status: 'failed' | 'skipped';
+  metadata: Record<string, unknown>;
+}) {
+  const service = getMetadataClient();
+  if (!service) return;
+
+  const { error } = await service.from('ai_usage_events').insert({
+    user_id: params.userId,
+    clip_id: params.clipId,
+    action: 'clip_auto_process',
+    model: null,
+    status: params.status,
+    metadata: params.metadata,
+  });
+
+  if (error) {
+    console.error('[batch-process-ai:event_failed]', { clipId: params.clipId, error: error.message });
+  }
 }
 
 async function readApiError(response: Response) {
@@ -167,6 +202,12 @@ export async function POST(req: NextRequest) {
     const clip = found.get(clipId);
     if (!clip) {
       results.push({ clipId, status: 'failed', error: 'Clip not found' });
+      await recordBatchAiEvent({
+        userId: user.id,
+        clipId,
+        status: 'failed',
+        metadata: { stage: 'lookup', error: 'Clip not found' },
+      });
       continue;
     }
 
@@ -188,13 +229,37 @@ export async function POST(req: NextRequest) {
             .eq('id', clipId);
         }
       } catch (error) {
-        console.warn('[batch-process-ai:extract_retry_failed]', { clipId, error: error instanceof Error ? error.message : String(error) });
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn('[batch-process-ai:extract_retry_failed]', { clipId, error: message });
+        await recordBatchAiEvent({
+          userId: user.id,
+          clipId,
+          status: 'failed',
+          metadata: {
+            stage: 'extract',
+            error: message,
+            url: clip.url,
+            content_type: clip.content_type,
+          },
+        });
       }
     }
 
     content = content || clip.saved_note || clip.my_note || clip.summary || clip.title || '';
     if (!content.trim() || content.trim().length <= 10) {
       results.push({ clipId, status: 'skipped', error: 'No content for AI processing' });
+      await recordBatchAiEvent({
+        userId: user.id,
+        clipId,
+        status: 'skipped',
+        metadata: {
+          stage: 'content_guard',
+          error: 'No content for AI processing',
+          has_url: Boolean(clip.url),
+          content_type: clip.content_type,
+          extracted_content_length: String(clip.extracted_content || '').length,
+        },
+      });
       continue;
     }
 
@@ -214,13 +279,35 @@ export async function POST(req: NextRequest) {
       });
 
       if (!response.ok) {
-        results.push({ clipId, status: 'failed', error: await readApiError(response) });
+        const error = await readApiError(response);
+        results.push({ clipId, status: 'failed', error });
+        await recordBatchAiEvent({
+          userId: user.id,
+          clipId,
+          status: 'failed',
+          metadata: {
+            stage: 'process_ai',
+            error,
+            content_length: content.length,
+          },
+        });
         continue;
       }
 
       results.push({ clipId, status: 'processed' });
     } catch (error) {
-      results.push({ clipId, status: 'failed', error: error instanceof Error ? error.message : String(error) });
+      const message = error instanceof Error ? error.message : String(error);
+      results.push({ clipId, status: 'failed', error: message });
+      await recordBatchAiEvent({
+        userId: user.id,
+        clipId,
+        status: 'failed',
+        metadata: {
+          stage: 'process_ai_exception',
+          error: message,
+          content_length: content.length,
+        },
+      });
     }
   }
 

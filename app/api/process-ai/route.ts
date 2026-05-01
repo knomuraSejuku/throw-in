@@ -103,6 +103,7 @@ async function checkAiQuota(userId: string, clipId: string) {
       .from('ai_usage_events')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
+      .eq('status', 'succeeded')
       .gte('created_at', weekStart.toISOString());
 
     if (error) return { ok: true, remaining: null };
@@ -128,6 +129,38 @@ function getMetadataClient() {
     serviceKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
+}
+
+async function recordAiEvent(params: {
+  userId: string;
+  clipId: string;
+  action: string;
+  status: 'succeeded' | 'failed' | 'skipped';
+  model?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  const service = getMetadataClient();
+  if (!service) return null;
+
+  const { data, error } = await service
+    .from('ai_usage_events')
+    .insert({
+      user_id: params.userId,
+      clip_id: params.clipId,
+      action: params.action,
+      model: params.model ?? null,
+      status: params.status,
+      metadata: params.metadata ?? {},
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('[ai_usage_event:failed]', { clipId: params.clipId, action: params.action, error: error.message });
+    return null;
+  }
+
+  return data.id as string;
 }
 
 function hashVersionSource(content: string, title: string) {
@@ -287,11 +320,35 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
 
       console.error('OpenAI response did not contain parseable metadata', { outputText: outputText.slice(0, 500) });
       if (attempt >= MAX_RETRIES) {
+        await recordAiEvent({
+          userId: user.id,
+          clipId,
+          action: 'clip_version',
+          status: 'failed',
+          model: AI_METADATA_MODEL,
+          metadata: {
+            stage: 'metadata_parse',
+            output_sample: outputText.slice(0, 1000),
+            content_length: content.length,
+          },
+        });
         return NextResponse.json({ error: 'AI response was not parseable' }, { status: 502 });
       }
     } else if (attempt >= MAX_RETRIES) {
       const errorInfo = await getOpenAIError(aiRes);
       console.error('OpenAI metadata request failed', errorInfo);
+      await recordAiEvent({
+        userId: user.id,
+        clipId,
+        action: 'clip_version',
+        status: 'failed',
+        model: AI_METADATA_MODEL,
+        metadata: {
+          stage: 'openai_metadata',
+          error: errorInfo,
+          content_length: content.length,
+        },
+      });
       return NextResponse.json({ error: 'AI request failed', detail: errorInfo.statusText || String(errorInfo.status) }, { status: 502 });
     } else {
       await new Promise(r => setTimeout(r, 2000));
@@ -333,28 +390,6 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
   const metadataClient = getMetadataClient() ?? supabase;
 
   let usageEventId: string | null = null;
-  const { data: usageEvent, error: usageError } = await metadataClient
-    .from('ai_usage_events')
-    .insert({
-      user_id: user.id,
-      clip_id: clipId,
-      action: 'clip_version',
-      model: AI_METADATA_MODEL,
-      status: 'succeeded',
-      metadata: {
-        embedding_model: embeddingVector ? AI_EMBEDDING_MODEL : null,
-        title_updated: Boolean(nextTitle),
-        tags_count: mergedTags.length,
-      },
-    })
-    .select('id')
-    .single();
-
-  if (usageError) {
-    console.error('Failed to persist AI usage event', usageError);
-  } else {
-    usageEventId = usageEvent.id;
-  }
 
   const sourceHash = hashVersionSource(content, nextTitle || currentTitle || clipTitle || '');
   const { data: latestVersion, error: latestVersionError } = await metadataClient
@@ -410,6 +445,18 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
   const { error: updateError } = await metadataClient.from('clips').update(dbUpdate).eq('id', clipId);
   if (updateError) {
     console.error('Failed to persist AI metadata', updateError);
+    await recordAiEvent({
+      userId: user.id,
+      clipId,
+      action: 'clip_version',
+      status: 'failed',
+      model: AI_METADATA_MODEL,
+      metadata: {
+        stage: 'persist_metadata',
+        error: updateError.message,
+        code: updateError.code,
+      },
+    });
     return NextResponse.json({ error: 'Failed to persist AI metadata', detail: updateError.message }, { status: 500 });
   }
 
@@ -420,6 +467,30 @@ ${existingTags.length > 0 ? existingTags.join(', ') : '（なし）'}
     if (tagError) {
       console.error('Failed to persist AI tags', tagError);
     }
+  }
+
+  usageEventId = await recordAiEvent({
+    userId: user.id,
+    clipId,
+    action: 'clip_version',
+    status: 'succeeded',
+    model: AI_METADATA_MODEL,
+    metadata: {
+      embedding_model: embeddingVector ? AI_EMBEDDING_MODEL : null,
+      title_updated: Boolean(nextTitle),
+      tags_count: mergedTags.length,
+      summary_present: Boolean(aiSummary),
+      key_points_present: Boolean(aiKeyPoints),
+      content_length: content.length,
+      version_id: currentVersionId,
+    },
+  });
+
+  if (usageEventId && currentVersionId) {
+    await metadataClient
+      .from('clip_versions')
+      .update({ ai_usage_event_id: usageEventId })
+      .eq('id', currentVersionId);
   }
 
   return NextResponse.json({ title: nextTitle, summary: aiSummary, tags: mergedTags, category: aiCategory, subcategory: aiSubcategory, keyPoints: aiKeyPoints });
