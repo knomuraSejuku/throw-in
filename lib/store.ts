@@ -211,6 +211,36 @@ export const useClipStore = create<ClipStore>()(
       ? content
       : targetClip?.body || targetClip?.userNote || targetClip?.summary || targetClip?.title || '';
 
+    if ((!targetClip?.body?.trim() || targetClip.body.trim().length <= 10) && targetClip?.url) {
+      getStore().updateProcessingJob(clipId, 'enriching');
+      try {
+        const res = await fetch('/api/batch-process-ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clipIds: [clipId], maxItems: 1, deadlineMs: 45000 }),
+        });
+
+        if (!res.ok) {
+          const detail = await res.text().catch(() => '');
+          throw new Error(`AI processing failed: ${res.status} ${detail.slice(0, 300)}`);
+        }
+
+        const result = await res.json();
+        if (Number(result?.processed ?? 0) <= 0) {
+          const detail = Array.isArray(result?.results) ? result.results[0]?.error : '';
+          throw new Error(detail || 'AI processing did not complete');
+        }
+
+        await getStore().fetchClips();
+        getStore().updateProcessingJob(clipId, 'done');
+        aiJustCompleted.add(clipId);
+      } catch (err) {
+        console.error('Job error', err);
+        getStore().updateProcessingJob(clipId, 'failed');
+      }
+      return;
+    }
+
     if (!effectiveContent.trim()) {
       console.warn('Skipping AI processing because clip content is empty', { clipId });
       getStore().updateProcessingJob(clipId, 'failed');
